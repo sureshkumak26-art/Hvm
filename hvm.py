@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# hvm.py - StrenoxCloud Panel - Full Web-Based LXC Container VPS Management System
+# hvm.py - Anime Cloud Panel - Full Web-Based LXC Container VPS Management System
 # Version: 6.0-PRO-ULTIMATE - FIXED
 
 import os
@@ -129,7 +129,7 @@ except ImportError:
     logging.warning("PIL not installed - image optimization disabled")
 
 # Environment variables
-PANEL_NAME = os.getenv('PANEL_NAME', 'StrenoxCloud PANEL')
+PANEL_NAME = os.getenv('PANEL_NAME', 'Anime Cloud Panel')
 PANEL_VERSION = os.getenv('PANEL_VERSION', '8.0-PRO')
 PANEL_DEVELOPER = os.getenv('PANEL_DEVELOPER', 'Hopingboz')
 SECRET_KEY = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
@@ -1357,11 +1357,11 @@ def init_db():
         settings_init = [
             ('cpu_threshold', '90', 'CPU usage threshold for auto-suspension (%)'),
             ('ram_threshold', '90', 'RAM usage threshold for auto-suspension (%)'),
-            ('site_name', 'StrenoxCloud PANEL', 'Site name'),
+            ('site_name', 'Anime Cloud Panel', 'Site name'),
             ('site_description', 'High-Performance VPS Management Panel', 'Site description'),
             ('header_icon', '/static/img/logo.png', 'Header icon path'),
             ('favicon', '/static/img/favicon.ico', 'Favicon path'),
-            ('footer_text', 'Powered by StrenoxCloud Panel', 'Footer text'),
+            ('footer_text', 'Powered by Anime Cloud Panel', 'Footer text'),
             ('maintenance_mode', '0', 'Maintenance mode (1=enabled, 0=disabled)'),
             ('maintenance_message', 'Site is under maintenance. Please check back later.', 'Maintenance message'),
             ('registration_enabled', '1', 'Registration enabled (1=enabled, 0=disabled)'),
@@ -1384,6 +1384,12 @@ def init_db():
             cur.execute('INSERT OR IGNORE INTO settings (key, value, description, updated_at) VALUES (?, ?, ?, ?)',
                        (key, value, description, datetime.now().isoformat()))
         
+        # Migrate legacy branding defaults only; preserve any custom site name.
+        cur.execute("UPDATE settings SET value = ?, updated_at = ? WHERE key = 'site_name' AND value IN ('StrenoxCloud PANEL', 'StrenoxCloud Panel', 'BreezeVM Panel', 'HVM Panel')",
+                    ('Anime Cloud Panel', datetime.now().isoformat()))
+        cur.execute("UPDATE settings SET value = ?, updated_at = ? WHERE key = 'footer_text' AND value IN ('Powered by StrenoxCloud Panel', 'Powered by HVM Panel')",
+                    ('Powered by Anime Cloud', datetime.now().isoformat()))
+
         # Port allocations table
         cur.execute('''CREATE TABLE IF NOT EXISTS port_allocations (
             user_id INTEGER PRIMARY KEY,
@@ -1912,7 +1918,7 @@ def check_maintenance_mode():
         
         return render_template('maintenance.html',
                              message=get_setting('maintenance_message', 'Site is under maintenance. Please check back later.'),
-                             panel_name=get_setting('site_name', 'StrenoxCloud PANEL')), 503
+                             panel_name=get_setting('site_name', 'Anime Cloud Panel')), 503
 
 @app.after_request
 def after_request(response):
@@ -7578,7 +7584,7 @@ logger.info("API blueprint registered at /api/v1")
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return render_template('index.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+    return render_template('index.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 # ============================================================================
 # LICENSE ACTIVATION ROUTES
@@ -7598,7 +7604,7 @@ def activate_license_page():
     }
 
     return render_template('activate_license.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           license_info=license_info,
                           system_info=system_info)
 
@@ -7691,7 +7697,7 @@ def login():
             flash('Invalid username/email or password', 'danger')
             log_activity(None, 'login_failed', 'auth', None, {'username_or_email': username_or_email, 'ip': request.remote_addr})
     
-    return render_template('login.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+    return render_template('login.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 @app.route('/2fa', methods=['GET', 'POST'])
 def two_factor():
@@ -7715,7 +7721,7 @@ def two_factor():
         else:
             flash('Invalid 2FA code', 'danger')
     
-    return render_template('2fa.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+    return render_template('2fa.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -7736,23 +7742,23 @@ def register():
         
         if not terms:
             flash('You must accept the terms of service', 'danger')
-            return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+            return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         if password != confirm_password:
             flash('Passwords do not match', 'danger')
-            return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+            return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         if len(password) < 4:
             flash('Password must be at least 4 characters', 'danger')
-            return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+            return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         if User.get_by_username(username):
             flash('Username already taken', 'danger')
-            return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+            return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         if User.get_by_email(email):
             flash('Email already registered', 'danger')
-            return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+            return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         password_hash = generate_password_hash(password)
         api_key = generate_api_key()
@@ -7772,11 +7778,11 @@ def register():
             conn.commit()
         
         log_activity(user_id, 'register', 'auth', None, {'username': username, 'email': email})
-        create_notification(user_id, 'success', 'Welcome!', f'Welcome to {get_setting("site_name", "StrenoxCloud PANEL")}! Your account has been created.')
+        create_notification(user_id, 'success', 'Welcome!', f'Welcome to {get_setting("site_name", "Anime Cloud Panel")}! Your account has been created.')
         flash('Registration successful! Please log in.', 'success')
         return redirect(url_for('login'))
     
-    return render_template('register.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+    return render_template('register.html', panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 # ============================================================================
 # Discord OAuth Authentication
@@ -8066,8 +8072,8 @@ def discord_auto_register(discord_id, discord_username, discord_email, discord_a
             login_user(user, remember=True)
             
             log_activity(user.id, 'register_discord', 'auth', str(user.id))
-            create_notification(user.id, 'success', 'Welcome!', f'Welcome to {get_setting("site_name", "StrenoxCloud Panel")}, {username}! Your account has been created.')
-            flash(f'Welcome to {get_setting("site_name", "StrenoxCloud Panel")}, {username}! Your account has been created.', 'success')
+            create_notification(user.id, 'success', 'Welcome!', f'Welcome to {get_setting("site_name", "Anime Cloud Panel")}, {username}! Your account has been created.')
+            flash(f'Welcome to {get_setting("site_name", "Anime Cloud Panel")}, {username}! Your account has been created.', 'success')
             return redirect(url_for('dashboard'))
             
     except Exception as e:
@@ -8241,7 +8247,7 @@ def send_email(to_email, subject, body, html_body=None):
         smtp_use_tls = get_setting('smtp_use_tls', '1') == '1'
         smtp_use_ssl = get_setting('smtp_use_ssl', '0') == '1'
         smtp_from_email = get_setting('smtp_from_email', smtp_username)
-        smtp_from_name = get_setting('smtp_from_name', get_setting('site_name', 'StrenoxCloud Panel'))
+        smtp_from_name = get_setting('smtp_from_name', get_setting('site_name', 'Anime Cloud Panel'))
         
         if not smtp_host or not smtp_username or not smtp_password:
             logger.error("SMTP configuration incomplete")
@@ -8347,7 +8353,7 @@ def forgot_password():
         if not email:
             flash('Please enter your email address', 'danger')
             return render_template('forgot_password.html', 
-                                 panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                                 panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         # Always show success message for security (don't reveal if email exists)
         success_message = 'If the email address is registered, you will receive a password reset link shortly.'
@@ -8368,7 +8374,7 @@ def forgot_password():
             reset_url = url_for('reset_password', token=token, _external=True)
             
             # Prepare email content
-            site_name = get_setting('site_name', 'StrenoxCloud Panel')
+            site_name = get_setting('site_name', 'Anime Cloud Panel')
             subject = f"Password Reset - {site_name}"
             
             # Text version
@@ -8452,7 +8458,7 @@ Best regards,
         return redirect(url_for('login'))
     
     return render_template('forgot_password.html', 
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
@@ -8470,12 +8476,12 @@ def reset_password(token):
         if not password or len(password) < 4:
             flash('Password must be at least 4 characters long', 'danger')
             return render_template('reset_password.html', token=token, 
-                                 panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                                 panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         if password != confirm_password:
             flash('Passwords do not match', 'danger')
             return render_template('reset_password.html', token=token,
-                                 panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                                 panel_name=get_setting('site_name', 'Anime Cloud Panel'))
         
         # Update password
         password_hash = generate_password_hash(password)
@@ -8500,7 +8506,7 @@ def reset_password(token):
             log_activity(user_id, 'complete_password_reset', 'user', str(user_id))
             
             # Send confirmation email
-            site_name = get_setting('site_name', 'StrenoxCloud Panel')
+            site_name = get_setting('site_name', 'Anime Cloud Panel')
             subject = f"Password Changed - {site_name}"
             
             text_body = f"""Hello {username},
@@ -8551,7 +8557,7 @@ Best regards,
         return redirect(url_for('login'))
     
     return render_template('reset_password.html', token=token,
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 # ============================================================================
 # Notifications Routes
@@ -8584,7 +8590,7 @@ def notifications():
         total = cur.fetchone()[0]
     
     return render_template('notifications.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           notifications=notifications,
                           page=page,
                           total_pages=(total + per_page - 1) // per_page)
@@ -8645,7 +8651,7 @@ def os_icons():
         icons = [dict(row) for row in cur.fetchall()]
     
     return render_template('admin/os_icons.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           icons=icons,
                           os_options=OS_OPTIONS)
 
@@ -8872,7 +8878,7 @@ def profile():
     notifications = get_user_notifications(current_user.id, limit=10)
     
     return render_template('profile.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           activities=activities,
                           notifications=notifications)
 
@@ -9040,7 +9046,7 @@ def dashboard():
         })
     
     return render_template('dashboard.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           site_description=get_setting('site_description', ''),
                           header_icon=get_setting('header_icon', '/static/img/logo.png'),
                           vps_list=vps_list,
@@ -9075,7 +9081,7 @@ def vps_list():
 
     return render_template(
         'vps_list.html',
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         vps_list=vps_list,
         socketio_available=SOCKETIO_AVAILABLE
     )
@@ -9310,7 +9316,7 @@ def vps_detail(vps_id):
 
     return render_template(
         "vps_detail.html",
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         vps=vps,
         node=node,
         stats=stats,
@@ -9511,7 +9517,7 @@ def vps_files(vps_id):
     status = run_sync(get_container_status(vps['container_name'], vps['node_id']))
     
     return render_template('vps_files.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           vps=vps,
                           status=status)
 
@@ -10367,7 +10373,7 @@ def vps_console(vps_id):
     
     return render_template(
         'console.html',
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         vps=vps,
         vps_ip=vps_ip,
         node=node,
@@ -12388,7 +12394,7 @@ def vps_ipconfig_page(vps_id):
         owner=owner_name,
         node=dict(node) if node else None,
         default_parent_iface=default_parent_iface,
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
     )
 
 @app.route('/vps/<int:vps_id>/reinstall', methods=['POST'])
@@ -13262,7 +13268,7 @@ def vps_suspended_page(vps_id):
     return render_template(
         "vps_suspended.html",
         vps=vps,
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL')
+        panel_name=get_setting('site_name', 'Anime Cloud Panel')
     )
 
 @app.route('/vps/<int:vps_id>/installing')
@@ -13309,7 +13315,7 @@ def vps_installing(vps_id):
         progress=progress,
         message=message,
         started_at=started_at,
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL')
+        panel_name=get_setting('site_name', 'Anime Cloud Panel')
     )
 
 @app.route('/vps/<int:vps_id>/reinstalling')
@@ -13357,7 +13363,7 @@ def vps_reinstalling_page(vps_id):
         os_version=os_version,
         progress=progress,
         message=message,
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL')
+        panel_name=get_setting('site_name', 'Anime Cloud Panel')
     )
 
 @app.route('/vps/<int:vps_id>/installation-progress')
@@ -13465,7 +13471,7 @@ def vps_migrating_page(vps_id):
         message=message,
         source_node_name=source_node_name,
         target_node_name=target_node_name,
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL')
+        panel_name=get_setting('site_name', 'Anime Cloud Panel')
     )
 
 @app.route('/vps/<int:vps_id>/migration-progress')
@@ -13612,7 +13618,7 @@ def ports_list():
             forward['display_ip'] = YOUR_SERVER_IP
     
     return render_template('ports.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           allocated=allocated,
                           used=used,
                           available=allocated - used,
@@ -13899,7 +13905,7 @@ def vps_snapshots(vps_id):
                          snapshot_limit=snapshot_limit,
                          snapshot_count=snapshot_count,
                          nodes=nodes,
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 @app.route('/vps/<int:vps_id>/snapshots/create', methods=['POST'])
 @login_required
@@ -14928,7 +14934,7 @@ def admin_dashboard():
     host_stats = run_sync(get_host_stats(1))
     
     return render_template('admin/dashboard.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           total_users=total_users,
                           total_vps=total_vps,
                           running_vps=running_vps,
@@ -14982,7 +14988,7 @@ def admin_users():
         total_users = cur.fetchone()[0]
     
     return render_template('admin/users.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           users=users,
                           search_query=search_query,
                           page=page,
@@ -15019,7 +15025,7 @@ def admin_user_detail(user_id):
         activities = [dict(row) for row in cur.fetchall()]
     
     return render_template('admin/user_detail.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           user=user,
                           vps_list=vps_list,
                           allocated_ports=allocated_ports,
@@ -15034,7 +15040,7 @@ def admin_users_create():
     # GET - Render the create user form
     if request.method == 'GET':
         return render_template('admin/users_create.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'))
     
     # POST - Process the form submission
     data = request.get_json(silent=True) or request.form.to_dict() or {}
@@ -15179,7 +15185,7 @@ def admin_user_edit(user_id):
         if request.method == 'GET':
             logger.info(f"Rendering edit form for user {user_id}")
             return render_template('admin/users_edit.html',
-                                  panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                                  panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                                   user=user,
                                   port_allocation=port_allocation,
                                   vps_count=vps_count)
@@ -15338,7 +15344,7 @@ def admin_vps():
 
     return render_template(
         'admin/vps.html',
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         vps_list=vps_list,
         search_query=search_query,
         node_id=node_id,
@@ -15420,7 +15426,7 @@ def admin_vps_expiring():
         total_with_expiration = cur.fetchone()[0]
     
     return render_template('admin/vps_expiring.html',
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                          expired_count=expired_count,
                          expiring_soon_count=expiring_soon_count,
                          total_with_expiration=total_with_expiration,
@@ -15712,7 +15718,7 @@ def admin_vps_expiration(vps_id):
         
         # Render HTML page
         return render_template('admin/vps_expiration.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                               vps=vps,
                               user=user,
                               expires_info=expires_info)
@@ -15834,7 +15840,7 @@ def admin_vps_edit(vps_id):
             users=users,
             nodes=nodes,
             os_options=OS_OPTIONS,
-            panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+            panel_name=get_setting('site_name', 'Anime Cloud Panel'),
             vps_forwards=vps_forwards,
             current_user_allocation=current_user_allocation,
             current_user_used=current_user_used
@@ -16361,7 +16367,7 @@ def admin_vps_create():
         nodes = get_nodes()
         
         return render_template('admin/vps_create.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                               users=users,
                               nodes=nodes,
                               os_options=OS_OPTIONS)
@@ -16657,7 +16663,7 @@ def admin_nodes():
                     node['health_status'] = 'error'
         
         return render_template('admin/nodes.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                               nodes=nodes,
                               socketio_available=SOCKETIO_AVAILABLE,
                               live_stats_available=LIVE_STATS_AVAILABLE)
@@ -16761,7 +16767,7 @@ def admin_circuit_breakers():
     nodes = get_nodes()
     
     return render_template('admin/circuit_breakers.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           circuit_status=circuit_status,
                           nodes=nodes)
 
@@ -16965,7 +16971,7 @@ def admin_node_create():
     # GET - Render create form
     if request.method == 'GET':
         return render_template('admin/nodes_create.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'))
     
     # POST - Process form submission
     data = request.get_json() or request.form.to_dict()
@@ -17115,7 +17121,7 @@ def admin_node_edit(node_id):
             ip_aliases_str = ''
         
         return render_template('admin/node_edit.html',
-                              panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                              panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                               node=node,
                               status=status,
                               vps_count=vps_count,
@@ -17306,7 +17312,7 @@ def admin_settings():
             'default_port_quota', 'max_vps_per_user', 'session_timeout',
             'backup_retention', 'theme', 'language', 'timezone',
             'discord_client_id', 'discord_client_secret', 'discord_redirect_uri', 'discord_button_text',
-            'video_background_url',
+            'video_background_url', 'background_image_url',
             'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
             'smtp_from_email', 'smtp_from_name'
         ]
@@ -17331,6 +17337,9 @@ def admin_settings():
         
         set_setting('video_background_enabled',
                     '1' if 'video_background_enabled' in data else '0')
+
+        set_setting('background_image_enabled',
+                    '1' if 'background_image_enabled' in data else '0')
 
         set_setting('smtp_use_tls',
                     '1' if 'smtp_use_tls' in data else '0')
@@ -17358,7 +17367,7 @@ def admin_settings():
         'backup_enabled', 'backup_retention', 'theme', 'language', 'timezone',
         'discord_auth_enabled', 'discord_client_id', 'discord_client_secret',
         'discord_redirect_uri', 'discord_auto_register', 'discord_button_text',
-        'video_background_enabled', 'video_background_url',
+        'video_background_enabled', 'video_background_url', 'background_image_enabled', 'background_image_url',
         'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password',
         'smtp_from_email', 'smtp_from_name', 'smtp_use_tls', 'smtp_use_ssl'
     ]
@@ -17368,7 +17377,7 @@ def admin_settings():
 
     return render_template(
         'admin/settings.html',
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         settings=settings
     )
 
@@ -17386,7 +17395,7 @@ def admin_test_smtp():
             return jsonify({'success': False, 'error': 'No email address provided'}), 400
         
         # Test email content
-        site_name = get_setting('site_name', 'StrenoxCloud Panel')
+        site_name = get_setting('site_name', 'Anime Cloud Panel')
         subject = f"SMTP Test - {site_name}"
         
         text_body = f"""Hello,
@@ -17529,7 +17538,7 @@ def upload_favicon():
 @main_admin_required
 def admin_maintenance():
     return render_template('admin/maintenance.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'))
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'))
 
 @app.route('/admin/backup', methods=['POST'])
 @login_required
@@ -17574,7 +17583,7 @@ def admin_backup_list():
     backups.sort(key=lambda x: x['modified'], reverse=True)
     
     return render_template('admin/backup_list.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           backups=backups)
 
 @app.route('/admin/backup/restore/<filename>', methods=['POST'])
@@ -17698,7 +17707,7 @@ def admin_system_info():
     system_info = get_system_info_dict()
     
     return render_template('admin/system_info.html',
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                          system_info=system_info,
                          psutil_available=PSUTIL_AVAILABLE)
 
@@ -18086,7 +18095,7 @@ def admin_logs():
                 pass
     
     return render_template('admin/logs.html',
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                          available_logs=available_logs,
                          current_log=log_type)
 
@@ -18124,7 +18133,7 @@ def admin_api():
             users = [dict(row) for row in cur.fetchall()]
     
     return render_template('admin/api.html',
-                         panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                         panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                          api_keys=api_keys,
                          users=users)
 
@@ -18407,7 +18416,7 @@ def admin_node_check(node_id):
 def admin_live_stats():
     """Live stats management page"""
     return render_template('admin/live_stats.html',
-                          panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                          panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                           live_stats_available=LIVE_STATS_AVAILABLE)
 
 @app.route('/admin/nodes/<int:node_id>/view')
@@ -18576,7 +18585,7 @@ def admin_node_view(node_id):
                     vps['live_status'] = vps.get('status', 'unknown').lower()
         
         return render_template('admin/node_view.html',
-                             panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+                             panel_name=get_setting('site_name', 'Anime Cloud Panel'),
                              node=node,
                              status=status,
                              stats=stats,
@@ -18612,7 +18621,7 @@ def admin_node_console(node_id):
 
     return render_template(
         'admin/node_console.html',
-        panel_name=get_setting('site_name', 'StrenoxCloud PANEL'),
+        panel_name=get_setting('site_name', 'Anime Cloud Panel'),
         node=node,
         ssh_available=SSH_AVAILABLE,
         shell_console_available=SHELL_CONSOLE_AVAILABLE,
@@ -19646,19 +19655,19 @@ def resource_monitor():
 def not_found_error(error):
     if request.is_json or request.headers.get('Content-Type') == 'application/json':
         return jsonify({'success': False, 'error': 'Not found'}), 404
-    return render_template('errors/404.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL')), 404
+    return render_template('errors/404.html', panel_name=get_setting('site_name', 'Anime Cloud Panel')), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     if request.is_json or request.headers.get('Content-Type') == 'application/json':
         return jsonify({'success': False, 'error': 'Internal server error'}), 500
-    return render_template('errors/500.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL')), 500
+    return render_template('errors/500.html', panel_name=get_setting('site_name', 'Anime Cloud Panel')), 500
 
 @app.errorhandler(403)
 def forbidden_error(error):
     if request.is_json or request.headers.get('Content-Type') == 'application/json':
         return jsonify({'success': False, 'error': 'Forbidden'}), 403
-    return render_template('errors/403.html', panel_name=get_setting('site_name', 'StrenoxCloud PANEL')), 403
+    return render_template('errors/403.html', panel_name=get_setting('site_name', 'Anime Cloud Panel')), 403
 
 @app.errorhandler(401)
 def unauthorized_error(error):
