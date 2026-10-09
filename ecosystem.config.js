@@ -1,12 +1,13 @@
 module.exports = {
   apps: [
     {
-      name: "hvm-panel",
+      name: "anime-cloud-panel",
       script: "hvm.py",
       cwd: "./",
       interpreter: "python",
       env: {
         "FLASK_ENV": "production",
+        "PANEL_NAME": "Anime Cloud Panel",
         "YOUR_SERVER_IP": "127.0.0.1"
       },
       log_date_format: "YYYY-MM-DD HH:mm Z",
@@ -14,7 +15,7 @@ module.exports = {
       out_file: "logs/panel-out.log"
     },
     {
-      name: "hvm-discord-bot",
+      name: "anime-cloud-discord-bot",
       script: "bot.py",
       cwd: "./bot",
       interpreter: "python",
@@ -24,7 +25,7 @@ module.exports = {
       log_date_format: "YYYY-MM-DD HH:mm Z",
       error_file: "../logs/bot-error.log",
       out_file: "../logs/bot-out.log",
-      depends_on: "hvm-panel"
+      depends_on: "anime-cloud-panel"
     }
   ]
 };
