@@ -102,6 +102,31 @@
         </div>
     </div>
 
+    <!-- Custom Image Background Settings -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-image"></i> Panel Background</h3>
+        </div>
+        <div class="form-group">
+            <label class="form-checkbox" style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" name="background_image_enabled" {% if settings.background_image_enabled == '1' %}checked{% endif %}>
+                <span>Enable custom image background</span>
+            </label>
+            <small style="color:var(--text-muted);display:block;margin-top:.25rem;">When enabled, the image takes priority over the video background.</small>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="backgroundImageUrl">Background Image URL</label>
+            <input type="url" id="backgroundImageUrl" name="background_image_url" class="form-control" value="{{ settings.background_image_url }}" placeholder="https://example.com/background.jpg">
+            <small style="color:var(--text-muted);">Use a trusted HTTPS image URL. Keep it subtle so text and buttons stay readable.</small>
+        </div>
+        {% if settings.background_image_url %}
+        <div style="margin-top:1rem;">
+            <label class="form-label">Preview</label>
+            <img src="{{ settings.background_image_url }}" alt="Background preview" loading="lazy" style="display:block;width:100%;max-width:520px;max-height:220px;object-fit:cover;border-radius:.75rem;border:1px solid var(--border-color);">
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Video Background Settings -->
     <div class="card" style="margin-bottom: 1.5rem;">
         <div class="card-header">
