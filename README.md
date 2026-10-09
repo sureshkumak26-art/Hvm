@@ -3,7 +3,7 @@
 This repository contains the existing Flask VPS panel, not a separate replacement app. Branding, background settings, and the existing Discord bot are being updated in place.
 
 ## VPS installation
-- **[Ubuntu VPS Install Guide](VPS_INSTALL_GUIDE.md)** — install from GitHub, configure environment variables, run the panel with systemd, configure Nginx + HTTPS, and optionally run the Discord bot.
+- **[Panel Install Guide](PANEL_INSTALL_GUIDE.md)** — install from GitHub, configure environment variables, run the panel with systemd, configure Nginx + HTTPS, and optionally run the Discord bot.
 - Repository: https://github.com/sureshkumak26-art/Hvm
 
 ## Appearance
