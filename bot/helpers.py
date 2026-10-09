@@ -6,9 +6,8 @@ from config import ADMIN_USER_IDS, CLR_OK, CLR_ERR, CLR_INFO
 
 
 def is_admin(interaction: discord.Interaction) -> bool:
-    if not ADMIN_USER_IDS:
-        return True
-    return interaction.user.id in ADMIN_USER_IDS
+    # Fail closed: an empty allowlist must never grant administrative access.
+    return bool(ADMIN_USER_IDS) and interaction.user.id in ADMIN_USER_IDS
 
 
 def ok(title: str, desc: str = "", **kw) -> discord.Embed:
