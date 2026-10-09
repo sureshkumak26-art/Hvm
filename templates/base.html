@@ -199,8 +199,8 @@
             font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
             font-size: 0.85em;
         }
-        /* ===== VIDEO BACKGROUND ===== */
-        .bg-video {
+        /* ===== CUSTOM BACKGROUND MEDIA ===== */
+        .bg-image, .bg-video {
             position: fixed;
             top: 0;
             left: 0;
@@ -212,9 +212,8 @@
             pointer-events: none; /* Prevent interaction */
         }
         @media (max-width: 768px) {
-            .bg-video {
-                display: none; /* Disable video on mobile to save battery/data */
-            }
+            .bg-video { display: none; } /* Save mobile battery/data */
+            .bg-image { opacity: 0.18; }
         }
         /* ===== LAYOUT ===== */
         .app-wrapper {
@@ -1587,11 +1586,12 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Custom Animated Video Background -->
-    {% if get_setting('video_background_enabled', '1') == '1' and get_setting('video_background_url', '') %}
-    <video autoplay muted loop playsinline class="bg-video">
-        <source src="{{ get_setting('video_background_url', 'https://motionbgs.com/media/6069/minecraft-aquarium.1920x1080.mp4') }}" type="video/mp4">
-        Your browser does not support the video tag.
+    <!-- Anime Cloud custom background: image takes priority over video. -->
+    {% if get_setting('background_image_enabled', '0') == '1' and get_setting('background_image_url', '') %}
+    <img class="bg-image" src="{{ get_setting('background_image_url', '') }}" alt="" aria-hidden="true" loading="eager">
+    {% elif get_setting('video_background_enabled', '0') == '1' and get_setting('video_background_url', '') %}
+    <video autoplay muted loop playsinline class="bg-video" aria-hidden="true">
+        <source src="{{ get_setting('video_background_url', '') }}" type="video/mp4">
     </video>
     {% endif %}
     <div class="app-wrapper">
