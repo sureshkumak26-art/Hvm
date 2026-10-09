@@ -1,0 +1,863 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ panel_name }} · Console · {{ vps.container_name }}{% endblock %}
+{% block header_title %}Console · {{ vps.container_name }}{% endblock %}
+
+{% block extra_css %}
+<!-- Xterm.js -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+<style>
+    .vps-console-page {
+        --console-bg: #1a1e24;
+        --console-text: #f0f0f0;
+        --console-cursor: #00ff00;
+        --console-font: 'Menlo', 'Monaco', 'Courier New', monospace;
+        color: #e0e0e0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        min-height: calc(100vh - var(--header-height) - 80px);
+    }
+
+    /* Tighten the content padding on console pages so the terminal feels
+       roomy without losing the sidebar. */
+    body[data-console-page="vps"] .content { padding: 1rem; }
+    body[data-console-page="vps"] .footer { display: none; }
+
+    /* Console header strip (sits inside .content, above the terminal) */
+    .vps-console-page .console-strip {
+        background: rgba(10, 12, 16, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid #2a2e34;
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .vps-console-page .vps-info {
+        display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    }
+    .vps-console-page .back-link {
+        color: #8899aa;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        transition: all 0.2s;
+    }
+    .vps-console-page .back-link:hover {
+        color: #fff; background: rgba(255, 255, 255, 0.1);
+    }
+    .vps-console-page .vps-name {
+        font-size: 1.05rem; font-weight: 600; color: #fff;
+        display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .vps-console-page .status-badge {
+        padding: 0.2rem 0.7rem;
+        border-radius: 18px;
+        font-size: 0.72rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        background: rgba(255, 255, 255, 0.1);
+        display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .vps-console-page .status-badge.running {
+        background: #2ea04320; color: #7ee787; border: 1px solid #2ea043;
+    }
+    .vps-console-page .status-badge.stopped {
+        background: #da363320; color: #ff7b72; border: 1px solid #da3633;
+    }
+
+    .vps-console-page .console-actions {
+        display: flex; gap: 0.4rem; flex-wrap: wrap;
+    }
+    .vps-console-page .action-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid #2a2e34;
+        color: #8899aa;
+        padding: 0.45rem 0.85rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.82rem;
+    }
+    .vps-console-page .action-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border-color: #3a3e44;
+        transform: translateY(-1px);
+    }
+    .vps-console-page .action-btn.danger:hover {
+        background: #da363320; color: #ff7b72; border-color: #da3633;
+    }
+
+    /* The console wrapper */
+    .vps-console-page .console-wrapper {
+        background: var(--console-bg);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+        border: 1px solid #2a2e34;
+        flex: 1;
+        min-height: 460px;
+        display: flex;
+        flex-direction: column;
+    }
+    .vps-console-page .console-tabs {
+        background: #0f1115;
+        border-bottom: 1px solid #2a2e34;
+        padding: 0.45rem 0.85rem;
+        display: flex;
+        gap: 0.4rem;
+    }
+    .vps-console-page .tab {
+        padding: 0.4rem 0.85rem;
+        background: transparent;
+        border: none;
+        color: #8899aa;
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.2s;
+    }
+    .vps-console-page .tab:hover {
+        background: rgba(255, 255, 255, 0.05); color: #fff;
+    }
+    .vps-console-page .tab.active {
+        background: #2ea04320; color: #7ee787;
+    }
+
+    .vps-console-page .console-content {
+        flex: 1; position: relative; overflow: hidden; min-height: 0;
+    }
+    .vps-console-page #terminal {
+        width: 100%; height: 100%; background: var(--console-bg);
+    }
+
+    .vps-console-page .console-status-bar {
+        background: #0f1115;
+        border-top: 1px solid #2a2e34;
+        padding: 0.5rem 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.78rem;
+        color: #8899aa;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .vps-console-page .connection-status {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .vps-console-page .status-indicator {
+        width: 8px; height: 8px; border-radius: 50%; background: #888;
+    }
+    .vps-console-page .status-indicator.connected {
+        background: #7ee787; box-shadow: 0 0 8px #7ee78780;
+    }
+    .vps-console-page .status-indicator.disconnected { background: #ff7b72; }
+    .vps-console-page .status-indicator.connecting {
+        background: #f0e68c; animation: vpscPulse 1.5s infinite;
+    }
+    @keyframes vpscPulse {
+        0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; }
+    }
+    .vps-console-page .console-info { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .vps-console-page .info-item {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+    }
+
+    .vps-console-page .key-hint {
+        background: #1a1e24;
+        padding: 0.15rem 0.45rem;
+        border-radius: 4px;
+        font-family: monospace;
+        border: 1px solid #2a2e34;
+        color: #fff;
+        font-size: 0.78rem;
+    }
+
+    /* Modal */
+    .vps-console-page .modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .vps-console-page .modal.active { display: flex; }
+    .vps-console-page .modal-content {
+        background: #1a1e24;
+        border-radius: 12px;
+        max-width: 400px;
+        width: 90%;
+        border: 1px solid #2a2e34;
+        overflow: hidden;
+    }
+    .vps-console-page .modal-header {
+        padding: 1.25rem;
+        background: #0f1115;
+        border-bottom: 1px solid #2a2e34;
+    }
+    .vps-console-page .modal-header h3 {
+        margin: 0; color: #fff;
+        display: flex; align-items: center; gap: 0.5rem;
+        font-size: 1.1rem;
+    }
+    .vps-console-page .modal-body { padding: 1.25rem; color: #e0e0e0; }
+    .vps-console-page .modal-footer {
+        padding: 1.25rem;
+        background: #0f1115;
+        border-top: 1px solid #2a2e34;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+    .vps-console-page .modal-btn {
+        padding: 0.6rem 1.25rem;
+        border-radius: 8px;
+        border: none;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .vps-console-page .modal-btn.cancel {
+        background: transparent; border: 1px solid #2a2e34; color: #8899aa;
+    }
+    .vps-console-page .modal-btn.cancel:hover {
+        background: rgba(255, 255, 255, 0.05); color: #fff;
+    }
+    .vps-console-page .modal-btn.confirm { background: #da3633; color: #fff; }
+    .vps-console-page .modal-btn.confirm:hover {
+        background: #f85149; transform: translateY(-1px);
+    }
+
+    /* Toasts */
+    .vps-console-page .toast-container {
+        position: fixed; top: 80px; right: 20px; z-index: 2000;
+    }
+    .vps-console-page .toast {
+        background: #1a1e24;
+        border: 1px solid #2a2e34;
+        border-radius: 8px;
+        padding: 0.75rem 1.1rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: #fff;
+        font-size: 0.85rem;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        animation: vpscSlideIn 0.3s ease;
+    }
+    .vps-console-page .toast.success { border-left: 4px solid #2ea043; }
+    .vps-console-page .toast.error   { border-left: 4px solid #da3633; }
+    .vps-console-page .toast.warning { border-left: 4px solid #f0e68c; }
+    @keyframes vpscSlideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    @media (max-width: 768px) {
+        .vps-console-page .action-btn span { display: none; }
+        .vps-console-page .console-strip { padding: 0.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vps-console-page" id="vpsConsolePage">
+
+    <!-- Header strip -->
+    <div class="console-strip">
+        <div class="vps-info">
+            <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="back-link">
+                <i class="fas fa-arrow-left"></i>
+                <span>Back to VPS</span>
+            </a>
+            <span class="vps-name">
+                <i class="fas fa-terminal"></i>
+                {{ vps.container_name }}
+            </span>
+            <span class="status-badge running" id="statusBadge">
+                <i class="fas fa-circle" style="font-size: 0.55rem;"></i>
+                Connected
+            </span>
+        </div>
+
+        <div class="console-actions">
+            <button class="action-btn" onclick="reconnectConsole()" title="Reconnect to console">
+                <i class="fas fa-sync-alt"></i><span>Reconnect</span>
+            </button>
+            <button class="action-btn" onclick="clearTerminal()" title="Clear terminal">
+                <i class="fas fa-eraser"></i><span>Clear</span>
+            </button>
+            <button class="action-btn" onclick="copyToClipboard()" title="Copy selection">
+                <i class="fas fa-copy"></i><span>Copy</span>
+            </button>
+            <button class="action-btn" onclick="pasteFromClipboard()" title="Paste">
+                <i class="fas fa-paste"></i><span>Paste</span>
+            </button>
+            <button class="action-btn" onclick="downloadSession()" title="Download session log">
+                <i class="fas fa-download"></i><span>Download</span>
+            </button>
+            <button class="action-btn danger" onclick="showRestartModal()" title="Restart VPS">
+                <i class="fas fa-power-off"></i><span>Restart</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Console wrapper -->
+    <div class="console-wrapper">
+        <div class="console-tabs">
+            <button class="tab active" onclick="switchTab('terminal', event)">
+                <i class="fas fa-terminal"></i> Terminal
+            </button>
+            <button class="tab" onclick="switchTab('logs', event)">
+                <i class="fas fa-list"></i> Session Logs
+            </button>
+            <button class="tab" onclick="switchTab('info', event)">
+                <i class="fas fa-info-circle"></i> Info
+            </button>
+        </div>
+
+        <div class="console-content">
+            <!-- Terminal Container -->
+            <div id="terminal" style="display: block;"></div>
+
+            <!-- Session Logs (hidden by default) -->
+            <div id="sessionLogs" style="display: none; height: 100%; overflow-y: auto; padding: 1rem; background: #1a1e24;">
+                <h4 style="margin-bottom: 1rem; color: #7ee787;">
+                    <i class="fas fa-history"></i> Session History
+                </h4>
+                <div id="logsContainer" style="font-family: monospace; font-size: 0.85rem; color: #8899aa;"></div>
+            </div>
+
+            <!-- Info Panel (hidden by default) -->
+            <div id="infoPanel" style="display: none; height: 100%; overflow-y: auto; padding: 1.5rem; background: #1a1e24;">
+                <div style="display: grid; gap: 1.5rem;">
+                    <div style="background: #0f1115; border-radius: 8px; padding: 1.25rem;">
+                        <h5 style="color: #7ee787; margin-bottom: 0.75rem;">
+                            <i class="fas fa-plug"></i> Connection Information
+                        </h5>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Status:</td>
+                                <td style="padding: 0.4rem 0;"><span id="infoStatus" class="status-badge running">Connected</span></td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Duration:</td>
+                                <td style="padding: 0.4rem 0; font-family: monospace;" id="sessionId">-</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Connected Since:</td>
+                                <td style="padding: 0.4rem 0;" id="connectedSince">-</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Data Received:</td>
+                                <td style="padding: 0.4rem 0;" id="dataReceived">0 KB</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Data Sent:</td>
+                                <td style="padding: 0.4rem 0;" id="dataSent">0 KB</td></tr>
+                        </table>
+                    </div>
+
+                    <div style="background: #0f1115; border-radius: 8px; padding: 1.25rem;">
+                        <h5 style="color: #7ee787; margin-bottom: 0.75rem;">
+                            <i class="fas fa-keyboard"></i> Keyboard Shortcuts
+                        </h5>
+                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.6rem;">
+                            <span class="key-hint">Ctrl + C</span><span style="color: #8899aa;">Interrupt current process</span>
+                            <span class="key-hint">Ctrl + L</span><span style="color: #8899aa;">Clear screen</span>
+                            <span class="key-hint">Ctrl + D</span><span style="color: #8899aa;">Exit shell</span>
+                            <span class="key-hint">Ctrl + Z</span><span style="color: #8899aa;">Suspend process</span>
+                            <span class="key-hint">Ctrl + A</span><span style="color: #8899aa;">Go to line start</span>
+                            <span class="key-hint">Ctrl + E</span><span style="color: #8899aa;">Go to line end</span>
+                            <span class="key-hint">Ctrl + U</span><span style="color: #8899aa;">Clear line</span>
+                            <span class="key-hint">Ctrl + W</span><span style="color: #8899aa;">Delete word</span>
+                            <span class="key-hint">Tab</span><span style="color: #8899aa;">Auto-complete</span>
+                            <span class="key-hint">↑ ↓</span><span style="color: #8899aa;">Command history</span>
+                        </div>
+                    </div>
+
+                    <div style="background: #0f1115; border-radius: 8px; padding: 1.25rem;">
+                        <h5 style="color: #7ee787; margin-bottom: 0.75rem;">
+                            <i class="fas fa-server"></i> VPS Information
+                        </h5>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Name:</td>
+                                <td style="padding: 0.4rem 0;">{{ vps.container_name }}</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">OS:</td>
+                                <td style="padding: 0.4rem 0;">{{ vps.os_version }}</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Resources:</td>
+                                <td style="padding: 0.4rem 0;">{{ vps.config }}</td></tr>
+                            <tr><td style="padding: 0.4rem 0; color: #8899aa;">Created:</td>
+                                <td style="padding: 0.4rem 0;">{{ vps.created_at }}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="console-status-bar">
+            <div class="connection-status">
+                <span class="status-indicator connected" id="connectionIndicator"></span>
+                <span class="status-text" id="connectionText">Connected</span>
+            </div>
+            <div class="console-info">
+                <div class="info-item">
+                    <i class="fas fa-keyboard"></i>
+                    <span>Ctrl+Shift+C/V to copy/paste</span>
+                </div>
+                <div class="info-item">
+                    <i class="fas fa-arrows-alt"></i>
+                    <span>Resizable</span>
+                </div>
+                <div class="info-item" id="cursorPosition">
+                    <i class="fas fa-cursor"></i>
+                    <span>Ln 1, Col 1</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restart confirmation modal -->
+    <div class="modal" id="restartModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-exclamation-triangle" style="color: #f0e68c;"></i>
+                    Confirm Restart
+                </h3>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to restart this VPS?</p>
+                <p style="color: #8899aa; font-size: 0.85rem; margin-top: 0.5rem;">
+                    This will disconnect the console session and reboot the system.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" onclick="hideRestartModal()">Cancel</button>
+                <button class="modal-btn confirm" onclick="restartVPS()">Restart VPS</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+</div>
+
+<script>
+    // Tag body for page-specific overrides.
+    document.body.setAttribute('data-console-page', 'vps');
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Xterm.js -->
+<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
+
+<script>
+    // VPS Data
+    const vpsData = {
+        id: {{ vps.id }},
+        name: '{{ vps.container_name }}',
+        nodeId: {{ vps.node_id }}
+    };
+
+    // Terminal and WebSocket variables
+    let terminal = null;
+    let socket = null;
+    let fitAddon = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    let reconnectTimeout = null;
+    let sessionStartTime = null;
+    let dataReceived = 0;
+    let dataSent = 0;
+    let sessionLogs = [];
+    let currentTab = 'terminal';
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initTerminal();
+        connectWebSocket();
+        startStatsUpdate();
+    });
+
+    function initTerminal() {
+        const terminalElement = document.getElementById('terminal');
+        terminal = new Terminal({
+            cursorBlink: true,
+            cursorStyle: 'block',
+            theme: {
+                background: '#1a1e24', foreground: '#f0f0f0',
+                cursor: '#00ff00', selection: 'rgba(255, 255, 255, 0.3)',
+                black: '#2e3436', red: '#cc0000', green: '#4e9a06',
+                yellow: '#c4a000', blue: '#3465a4', magenta: '#75507b',
+                cyan: '#06989a', white: '#d3d7cf',
+                brightBlack: '#555753', brightRed: '#ef2929',
+                brightGreen: '#8ae234', brightYellow: '#fce94f',
+                brightBlue: '#729fcf', brightMagenta: '#ad7fa8',
+                brightCyan: '#34e2e2', brightWhite: '#eeeeec'
+            },
+            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            fontSize: 14,
+            lineHeight: 1.2,
+            scrollback: 10000
+        });
+
+        fitAddon = new FitAddon.FitAddon();
+        terminal.loadAddon(fitAddon);
+        const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+        terminal.loadAddon(webLinksAddon);
+        terminal.open(terminalElement);
+        setTimeout(() => { try { fitAddon.fit(); } catch(e){} }, 100);
+
+        terminal.onData(function(data) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'input', data: data }));
+                dataSent += new Blob([data]).size;
+                updateInfoStats();
+                if (data.charCodeAt(0) !== 13) {
+                    addToSessionLog('input', data);
+                }
+            }
+        });
+
+        terminal.onResize(function(size) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'resize', cols: size.cols, rows: size.rows
+                }));
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            if (fitAddon && currentTab === 'terminal') {
+                try { fitAddon.fit(); } catch(e) {}
+            }
+        });
+        // Re-fit when the sidebar collapses/expands.
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('#menuToggle')) {
+                setTimeout(() => {
+                    if (fitAddon && currentTab === 'terminal') {
+                        try { fitAddon.fit(); } catch(e) {}
+                    }
+                }, 350);
+            }
+        });
+
+        terminal.onCursorMove(function() {
+            const buffer = terminal.buffer.active;
+            const cursorY = buffer.cursorY + 1;
+            const cursorX = buffer.cursorX + 1;
+            const el = document.getElementById('cursorPosition');
+            if (el) {
+                el.innerHTML =
+                    `<i class="fas fa-cursor"></i><span>Ln ${cursorY}, Col ${cursorX}</span>`;
+            }
+        });
+    }
+
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/console/${vpsData.id}`;
+        updateConnectionStatus('connecting', 'Connecting...');
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = function() {
+            updateConnectionStatus('connected', 'Connected');
+            sessionStartTime = new Date();
+            const cs = document.getElementById('connectedSince');
+            if (cs) cs.textContent = sessionStartTime.toLocaleTimeString();
+            reconnectAttempts = 0;
+            if (terminal) {
+                terminal.write('\r\n\x1b[32m✓ Connected to console session\x1b[0m\r\n');
+                terminal.write('\x1b[33m• Session started at ' + sessionStartTime.toLocaleString() + '\x1b[0m\r\n');
+                terminal.write('\x1b[33m• Type "exit" to close the session\x1b[0m\r\n\n');
+            }
+            showToast('Connected to console', 'success');
+        };
+
+        socket.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'output') {
+                    if (terminal && currentTab === 'terminal') {
+                        terminal.write(data.data);
+                    }
+                    dataReceived += new Blob([data.data]).size;
+                    updateInfoStats();
+                    addToSessionLog('output', data.data);
+                } else if (data.type === 'error') {
+                    if (terminal) terminal.write('\r\n\x1b[31mError: ' + data.message + '\x1b[0m\r\n');
+                    showToast(data.message, 'error');
+                } else if (data.type === 'connected') {
+                    if (terminal) terminal.write('\r\n\x1b[32m' + data.message + '\x1b[0m\r\n');
+                }
+            } catch (e) {
+                console.error('Error parsing message:', e);
+            }
+        };
+
+        socket.onclose = function() {
+            updateConnectionStatus('disconnected', 'Disconnected');
+            if (terminal) terminal.write('\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n');
+
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                if (terminal) terminal.write(`\x1b[33mAttempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts}) in ${delay/1000}s...\x1b[0m\r\n`);
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(connectWebSocket, delay);
+            } else if (terminal) {
+                terminal.write('\x1b[31mMax reconnection attempts reached. Please reconnect manually.\x1b[0m\r\n');
+            }
+        };
+
+        socket.onerror = function() {
+            updateConnectionStatus('disconnected', 'Error');
+            showToast('Connection error', 'error');
+        };
+    }
+
+    function updateConnectionStatus(status, text) {
+        const indicator = document.getElementById('connectionIndicator');
+        const statusText = document.getElementById('connectionText');
+        const statusBadge = document.getElementById('statusBadge');
+
+        if (indicator) indicator.className = 'status-indicator ' + status;
+        if (statusText) statusText.textContent = text;
+
+        if (statusBadge) {
+            if (status === 'connected') {
+                statusBadge.className = 'status-badge running';
+                statusBadge.innerHTML = '<i class="fas fa-circle" style="font-size: 0.55rem;"></i> Connected';
+            } else if (status === 'connecting') {
+                statusBadge.className = 'status-badge';
+                statusBadge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting';
+            } else {
+                statusBadge.className = 'status-badge stopped';
+                statusBadge.innerHTML = '<i class="fas fa-circle" style="font-size: 0.55rem;"></i> Disconnected';
+            }
+        }
+
+        const infoStatus = document.getElementById('infoStatus');
+        if (infoStatus) {
+            if (status === 'connected') {
+                infoStatus.className = 'status-badge running';
+                infoStatus.textContent = 'Connected';
+            } else if (status === 'connecting') {
+                infoStatus.className = 'status-badge';
+                infoStatus.textContent = 'Connecting';
+            } else {
+                infoStatus.className = 'status-badge stopped';
+                infoStatus.textContent = 'Disconnected';
+            }
+        }
+    }
+
+    function reconnectConsole() {
+        if (socket) { try { socket.close(); } catch(e){} }
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectAttempts = 0;
+        connectWebSocket();
+    }
+
+    function clearTerminal() {
+        if (terminal) {
+            terminal.clear();
+            showToast('Terminal cleared', 'success');
+        }
+    }
+
+    function copyToClipboard() {
+        if (terminal && terminal.hasSelection()) {
+            const selection = terminal.getSelection();
+            navigator.clipboard.writeText(selection).then(() => {
+                showToast('Copied to clipboard', 'success');
+            }).catch(() => showToast('Failed to copy', 'error'));
+        } else {
+            showToast('No text selected', 'warning');
+        }
+    }
+
+    function pasteFromClipboard() {
+        navigator.clipboard.readText().then(text => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'input', data: text }));
+                showToast('Pasted from clipboard', 'success');
+            }
+        }).catch(() => showToast('Failed to paste', 'error'));
+    }
+
+    function downloadSession() {
+        let logContent = '';
+        sessionLogs.forEach(log => { logContent += log.data; });
+        const blob = new Blob([logContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `console-session-${new Date().toISOString()}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Session log downloaded', 'success');
+    }
+
+    function addToSessionLog(type, data) {
+        sessionLogs.push({
+            type: type, data: data, timestamp: new Date().toISOString()
+        });
+        if (currentTab === 'logs') updateLogsDisplay();
+    }
+
+    function updateLogsDisplay() {
+        const logsContainer = document.getElementById('logsContainer');
+        if (!logsContainer) return;
+        let html = '';
+        sessionLogs.slice(-100).forEach(log => {
+            const time = new Date(log.timestamp).toLocaleTimeString();
+            const color = log.type === 'input' ? '#7ee787' : '#8899aa';
+            const icon = log.type === 'input' ? 'fa-arrow-right' : 'fa-arrow-left';
+            html += `<div style="margin-bottom: 0.25rem;">
+                <span style="color: #666; font-size: 0.8rem;">[${time}]</span>
+                <span style="color: ${color}; margin-left: 0.5rem;">
+                    <i class="fas ${icon}" style="font-size: 0.8rem;"></i>
+                    ${log.data.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                </span>
+            </div>`;
+        });
+        logsContainer.innerHTML = html || '<p style="color: #666;">No logs yet</p>';
+    }
+
+    function switchTab(tab, ev) {
+        currentTab = tab;
+        document.querySelectorAll('.vps-console-page .tab').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        if (ev && ev.target) {
+            ev.target.closest('.tab').classList.add('active');
+        }
+        document.getElementById('terminal').style.display = 'none';
+        document.getElementById('sessionLogs').style.display = 'none';
+        document.getElementById('infoPanel').style.display = 'none';
+        if (tab === 'terminal') {
+            document.getElementById('terminal').style.display = 'block';
+            setTimeout(() => { try { fitAddon.fit(); } catch(e){} }, 100);
+        } else if (tab === 'logs') {
+            document.getElementById('sessionLogs').style.display = 'block';
+            updateLogsDisplay();
+        } else if (tab === 'info') {
+            document.getElementById('infoPanel').style.display = 'block';
+        }
+    }
+
+    function updateInfoStats() {
+        const dr = document.getElementById('dataReceived');
+        const ds = document.getElementById('dataSent');
+        if (dr) dr.textContent = (dataReceived / 1024).toFixed(2) + ' KB';
+        if (ds) ds.textContent = (dataSent / 1024).toFixed(2) + ' KB';
+    }
+
+    function startStatsUpdate() {
+        setInterval(() => {
+            if (sessionStartTime) {
+                const duration = Math.floor((new Date() - sessionStartTime) / 1000);
+                const hours = Math.floor(duration / 3600);
+                const minutes = Math.floor((duration % 3600) / 60);
+                const seconds = duration % 60;
+                const el = document.getElementById('sessionId');
+                if (el) el.textContent =
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+    }
+
+    function showRestartModal() {
+        document.getElementById('restartModal').classList.add('active');
+    }
+    function hideRestartModal() {
+        document.getElementById('restartModal').classList.remove('active');
+    }
+
+    function restartVPS() {
+        hideRestartModal();
+        showToast('Restarting VPS...', 'warning');
+        fetch(`/vps/${vpsData.id}/control/restart`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showToast('VPS restart initiated', 'success');
+                if (socket) { try { socket.close(); } catch(e){} }
+                setTimeout(reconnectConsole, 5000);
+            } else {
+                showToast('Failed to restart VPS: ' + data.error, 'error');
+            }
+        })
+        .catch(err => {
+            showToast('Error restarting VPS', 'error');
+            console.error('Restart error:', err);
+        });
+    }
+
+    function showToast(message, type = 'info') {
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) return;
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        let icon = 'fa-info-circle';
+        if (type === 'success') icon = 'fa-check-circle';
+        if (type === 'error') icon = 'fa-exclamation-circle';
+        if (type === 'warning') icon = 'fa-exclamation-triangle';
+        toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+            e.preventDefault();
+            copyToClipboard();
+        }
+        if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+            e.preventDefault();
+            pasteFromClipboard();
+        }
+        if (e.ctrlKey && e.key === 'l' && currentTab !== 'terminal') {
+            e.preventDefault();
+            clearTerminal();
+        }
+    });
+
+    window.addEventListener('beforeunload', function() {
+        if (socket) { try { socket.close(); } catch(e){} }
+    });
+
+    // Expose helpers for inline onclick handlers
+    window.switchTab = switchTab;
+    window.reconnectConsole = reconnectConsole;
+    window.clearTerminal = clearTerminal;
+    window.copyToClipboard = copyToClipboard;
+    window.pasteFromClipboard = pasteFromClipboard;
+    window.downloadSession = downloadSession;
+    window.showRestartModal = showRestartModal;
+    window.hideRestartModal = hideRestartModal;
+    window.restartVPS = restartVPS;
+</script>
+{% endblock %}

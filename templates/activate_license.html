@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Activate License - {{ panel_name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0c10;
+            --bg-secondary: #111318;
+            --bg-tertiary: #1a1d24;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #2563eb;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+            --border-color: #1f2937;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0a0c10 0%, #1a1d24 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            position: relative;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* Animated background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            opacity: 0.4;
+            animation: float 15s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -80px) scale(1.2); }
+            50% { transform: translate(-30px, -150px) scale(0.8); }
+            75% { transform: translate(70px, -100px) scale(1.1); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 550px;
+            margin: auto;
+        }
+
+        .license-card {
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .license-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6 0%, #2563eb 50%, #3b82f6 100%);
+            background-size: 200% 100%;
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 1rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 12px 32px rgba(59, 130, 246, 0.6); }
+        }
+
+        .logo i {
+            font-size: 2rem;
+            color: white;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .version {
+            display: inline-block;
+            padding: 0.35rem 0.85rem;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--accent-primary);
+            font-weight: 600;
+        }
+
+        .info-box {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-box h3 {
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-box p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .feature-item i {
+            color: var(--accent-success);
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.9rem 0.9rem 0.9rem 2.75rem;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            background: var(--bg-secondary);
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            animation: slideDown 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--accent-success);
+        }
+
+        .alert-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--accent-danger);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer a {
+            color: var(--accent-primary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer a:hover {
+            color: var(--accent-secondary);
+        }
+
+        .security-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .security-badge i {
+            color: var(--accent-success);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 640px) {
+            body {
+                padding: 0.75rem;
+            }
+
+            .license-card {
+                padding: 1.5rem;
+                border-radius: 16px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .subtitle {
+                font-size: 0.9rem;
+            }
+
+            .logo {
+                width: 60px;
+                height: 60px;
+            }
+
+            .logo i {
+                font-size: 1.75rem;
+            }
+
+            .info-box {
+                padding: 1rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            input[type="text"] {
+                padding: 0.85rem 0.85rem 0.85rem 2.5rem;
+                font-size: 0.9rem;
+            }
+
+            .btn {
+                padding: 0.9rem;
+                font-size: 0.95rem;
+            }
+
+            .version {
+                font-size: 0.75rem;
+                padding: 0.3rem 0.7rem;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .license-card {
+                padding: 1.25rem;
+            }
+
+            h1 {
+                font-size: 1.35rem;
+            }
+
+            .feature-item {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Smooth scrolling for mobile */
+        @media (max-height: 700px) {
+            body {
+                align-items: flex-start;
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-animation">
+        <div class="particle" style="left: 10%; top: 20%; animation-delay: 0s;"></div>
+        <div class="particle" style="left: 20%; top: 80%; animation-delay: 2s;"></div>
+        <div class="particle" style="left: 30%; top: 40%; animation-delay: 4s;"></div>
+        <div class="particle" style="left: 40%; top: 60%; animation-delay: 1s;"></div>
+        <div class="particle" style="left: 50%; top: 30%; animation-delay: 3s;"></div>
+        <div class="particle" style="left: 60%; top: 70%; animation-delay: 5s;"></div>
+        <div class="particle" style="left: 70%; top: 50%; animation-delay: 2.5s;"></div>
+        <div class="particle" style="left: 80%; top: 20%; animation-delay: 4.5s;"></div>
+        <div class="particle" style="left: 90%; top: 60%; animation-delay: 1.5s;"></div>
+    </div>
+
+    <div class="container">
+        <div class="license-card">
+            <div class="header">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h1>{{ panel_name }}</h1>
+                <p class="subtitle">License Activation Required</p>
+                <span class="version"><i class="fas fa-code-branch"></i> Version {{ system_info.environment.PANEL_VERSION }}</span>
+            </div>
+
+            <div class="info-box">
+                <h3><i class="fas fa-info-circle"></i> Welcome</h3>
+                <p>To continue using HVM Panel, please enter the license key issued to you. The key is validated in real-time against the official License Server, and re-checked every 5 minutes.</p>
+                <div class="features">
+                    <div class="feature-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Ed25519 signed validation</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Live server check</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>IP / machine binding</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Tamper proof</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if license_info and license_info.get('last_error') %}
+            <div class="alert alert-danger" style="margin-bottom:1rem">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Last validation error: {{ license_info.get('last_error') }}</span>
+            </div>
+            {% endif %}
+
+            {% if license_info and license_info.get('machine_id') %}
+            <div class="info-box" style="font-size:.8rem">
+                <h3 style="font-size:.85rem"><i class="fas fa-fingerprint"></i> Machine ID</h3>
+                <p style="margin:0;color:var(--text-muted);font-family:'Courier New',monospace;font-size:.72rem;word-break:break-all">{{ license_info.get('machine_id') }}</p>
+            </div>
+            {% endif %}
+
+            <div id="alertContainer"></div>
+
+            <form id="licenseForm" onsubmit="activateLicense(event)">
+                <div class="form-group">
+                    <label for="licenseKey">
+                        <i class="fas fa-key"></i> License Key
+                    </label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock input-icon"></i>
+                        <input 
+                            type="text" 
+                            id="licenseKey" 
+                            name="license_key" 
+                            placeholder="Enter your license key..."
+                            required
+                            autocomplete="off"
+                            spellcheck="false">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">
+                    <i class="fas fa-unlock"></i>
+                    <span>Activate License</span>
+                </button>
+            </form>
+
+            <div class="security-badge">
+                <i class="fas fa-shield-check"></i>
+                <span>Ed25519 signed - re-validated every 5 minutes</span>
+            </div>
+
+            <div class="footer">
+                <p>
+                    <i class="fas fa-heart" style="color: #ef4444;"></i>
+                    Made with love by <strong>HopingBoyz</strong>
+                </p>
+                <p style="font-size: 0.8rem;">
+                    Need help? <a href="mailto:support@hvmpanel.com">Contact Support</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                <span>${message}</span>
+            `;
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alert);
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            }
+        }
+
+        function activateLicense(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const licenseKey = document.getElementById('licenseKey').value.trim();
+            
+            if (!licenseKey) {
+                showAlert('Please enter a license key', 'danger');
+                return;
+            }
+
+            // Disable button and show loading
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner"></div> <span>Activating...</span>';
+
+            fetch('/activate-license', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ license_key: licenseKey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message || 'License activated', 'success');
+                } else {
+                    showAlert(data.error || data.message || 'Invalid license key', 'danger');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-unlock"></i> <span>Activate License</span>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Network error. Please try again.', 'danger');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-unlock"></i> <span>Activate License</span>';
+            });
+        }
+
+        // Smooth input animation
+        const input = document.getElementById('licenseKey');
+        input.addEventListener('focus', function() {
+            this.parentElement.style.transition = 'transform 0.2s ease';
+            this.parentElement.style.transform = 'scale(1.01)';
+        });
+        input.addEventListener('blur', function() {
+            this.parentElement.style.transform = 'scale(1)';
+        });
+
+        // Prevent zoom on mobile input focus
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+            document.querySelector('meta[name=viewport]').setAttribute('content', 
+                'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+        }
+
+        // Poll the local status so that if a background revalidation succeeds,
+        // we automatically forward to the dashboard.
+        setInterval(() => {
+            fetch('/api/license/status').then(r => r.json()).then(d => {
+                if (d && d.activated) {
+                    window.location.href = '/';
+                }
+            }).catch(() => {});
+        }, 10000);
+    </script>
+</body>
+</html>

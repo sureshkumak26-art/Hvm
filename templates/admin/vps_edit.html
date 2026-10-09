@@ -1,0 +1,1010 @@
+{% extends "base.html" %}
+
+{% block title %}Edit VPS: {{ vps.hostname or vps.container_name }} - {{ panel_name }}{% endblock %}
+
+{% block header_title %}Edit VPS{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_dashboard') }}" class="breadcrumb-item">Admin</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_vps') }}" class="breadcrumb-item">VPS</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">{{ vps.hostname or vps.container_name }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- VPS Header -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <div class="user-avatar" style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-hover));">
+            <i class="fas fa-server" style="font-size: 1.25rem;"></i>
+        </div>
+        <div>
+            <h2 style="font-size: 1.25rem;">{{ vps.hostname or vps.container_name }}</h2>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">Container: {{ vps.container_name }}</div>
+        </div>
+        <div style="margin-left: auto;">
+            <div class="status-indicator">
+                <span class="status-dot {% if vps.suspended %}suspended{% elif vps.status == 'running' %}running{% else %}stopped{% endif %}"></span>
+                <span>{% if vps.suspended %}Suspended{% else %}{{ vps.status|title }}{% endif %}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Form -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-edit"></i>
+            VPS Configuration
+        </h3>
+    </div>
+
+    <form method="POST" action="{{ url_for('admin_vps_edit', vps_id=vps.id) }}">
+        <div class="grid grid-2">
+            <div class="form-group">
+                <label class="form-label">Owner</label>
+                <select name="user_id" class="form-control" required>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if user.id == vps.user_id %}selected{% endif %}>
+                        {{ user.username }} ({{ user.email }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Node</label>
+                <select name="node_id" class="form-control" required>
+                    {% for node in nodes %}
+                    <option value="{{ node.id }}" {% if node.id == vps.node_id %}selected{% endif %}>
+                        {{ node.name }} ({{ node.location }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-muted);">Changing node will migrate the VPS</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Hostname</label>
+                <input type="text" name="hostname" class="form-control" value="{{ vps.hostname or vps.container_name }}" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Operating System</label>
+                <select name="os_version" class="form-control">
+                    {% for os in os_options %}
+                    <option value="{{ os.value }}" {% if os.value == vps.os_version %}selected{% endif %}>
+                        {{ os.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="color: var(--text-muted);">Changing OS will reinstall the VPS</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">CPU Cores</label>
+                <input type="number" name="cpu" class="form-control" value="{{ vps.cpu }}" min="1" max="64" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">RAM (GB)</label>
+                <input type="number" name="ram" class="form-control" value="{{ vps.ram|replace('GB','') }}" min="1" max="128" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Disk (GB)</label>
+                <input type="number" name="disk" class="form-control" value="{{ vps.storage|replace('GB','') }}" min="5" max="2000" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Swap Memory</label>
+                <input type="text" class="form-control" value="PERMANENTLY DISABLED" disabled readonly>
+                <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                    Swap memory is permanently disabled for all VPS to ensure optimal performance and resource isolation.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" name="kvm_enabled" style="width: auto; margin: 0;" {% if vps.kvm_enabled %}checked{% endif %}>
+                    Enable KVM Access (Nested Virtualization)
+                </label>
+                <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                    Allows running VMs inside the VPS. VPS will be restarted if changed.
+                </small>
+            </div>
+        </div>
+
+        <!-- IP Address Configuration (mirrors /admin/vps/create + /vps/<id>/ipconfig) -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background-color: var(--bg-secondary); border-radius: var(--border-radius-sm); border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 1rem;"><i class="fas fa-globe"></i> IP Address Configuration</h4>
+
+            <!-- Master toggle: when unchecked, the IP-config block is
+                 visually disabled. On save, if the VPS currently has
+                 an IP this will REMOVE it (form fields are cleared
+                 by the submit handler so the backend treats it as
+                 the "remove" path). Default is ON when the VPS
+                 already has an IP, OFF otherwise. -->
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="ipc_configure" {% if vps.ip_address %}checked{% endif %} style="width: auto; margin: 0;">
+                    <span style="font-weight: 600;">Configure Public IP Address</span>
+                </label>
+                <small style="color: var(--text-muted); display: block; margin-top: 0.25rem; padding-left: 1.65rem;">
+                    Uncheck to skip the IP-config section. {% if vps.ip_address %}If you save with this off, the currently-attached public IP <span style="font-family: monospace;">{{ vps.ip_address }}</span> will be <strong>removed</strong> from the VPS.{% else %}This VPS has no public IP — saving with this off will keep it that way.{% endif %}
+                </small>
+            </div>
+
+            <div id="ipc_section">
+
+            <style>
+            .ipc-grid-edit { display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem; }
+            @media (max-width: 1100px) { .ipc-grid-edit { grid-template-columns: 1fr; } }
+            .ipc-card-inner { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem 1.1rem; margin-bottom: 1rem; }
+            .ipc-card-inner h5 { margin: 0 0 .85rem 0; font-size: .98rem; display: flex; align-items: center; gap: .5rem; }
+            .ipc-card-inner h5 i { color: #8b5cf6; }
+            .ipc-mono { font-family: 'Courier New', Consolas, monospace; word-break: break-all; }
+            .ipc-kv { display: grid; grid-template-columns: 150px 1fr; gap: .35rem .9rem; font-size: .9rem; }
+            .ipc-kv .k { color: var(--text-muted); }
+            .ipc-kv .v { color: var(--text-primary); }
+            .ipc-pill { display: inline-block; padding: .2rem .55rem; border-radius: 6px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+            .ipc-pill.ok { background: rgba(16,185,129,.15); color: #10b981; }
+            .ipc-pill.warn { background: rgba(245,158,11,.15); color: #f59e0b; }
+            .ipc-pill.muted { background: var(--bg-secondary); color: var(--text-muted); }
+            .ipc-cmd { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: .75rem .85rem; font-family: 'Courier New', Consolas, monospace; font-size: .78rem; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+            .ipc-cmd .h { color: #8b5cf6; }
+            .ipc-cmd .lxc { color: #3b82f6; }
+            .ipc-cmd .ip-ok { color: #10b981; }
+            .ipc-input-row { display: grid; grid-template-columns: 1fr 110px; gap: .5rem; }
+            @media (max-width: 520px) { .ipc-input-row { grid-template-columns: 1fr; } }
+            .ipc-note { padding: .75rem .95rem; border-radius: 8px; font-size: .82rem; line-height: 1.55; }
+            .ipc-note.info { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--text-secondary); }
+            .ipc-note.warn { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.25); color: var(--text-secondary); }
+            .ipc-note strong { color: var(--text-primary); }
+            </style>
+
+            <div class="ipc-grid-edit">
+                <!-- LEFT: routed IP form -->
+                <div>
+                    <div class="ipc-card-inner">
+                        <h5><i class="fas fa-globe"></i> Routed Public IP</h5>
+
+                        <div class="ipc-kv" style="margin-bottom: 1rem;">
+                            <div class="k">Current IP</div>
+                            <div class="v">
+                                {% if vps.ip_address %}
+                                    <span class="ipc-mono">{{ vps.ip_address }}</span>
+                                    <span class="ipc-pill ok" style="margin-left:.5rem;">configured</span>
+                                {% else %}
+                                    <span class="ipc-pill muted">none</span>
+                                {% endif %}
+                            </div>
+                            <div class="k">Container</div>
+                            <div class="v ipc-mono">{{ vps.container_name }}</div>
+                            <div class="k">Current Subnet</div>
+                            <div class="v ipc-mono">/{{ current_ip_subnet }}</div>
+                            <div class="k">Current Parent</div>
+                            <div class="v ipc-mono">{{ current_ip_parent_iface }}</div>
+                            <div class="k">Status</div>
+                            <div class="v">
+                                <span class="ipc-pill {% if vps.status == 'running' %}ok{% else %}warn{% endif %}">{{ vps.status }}</span>
+                                {% if vps.status == 'running' %}
+                                    <span style="color: var(--text-muted); margin-left:.5rem; font-size:.8rem;">VPS will be restarted automatically if the IP is changed.</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">New IP Address</label>
+                            <div class="ipc-input-row">
+                                <input type="text" id="ip_address" name="ip_address" class="form-control ipc-mono"
+                                       value="{{ vps.ip_address or '' }}"
+                                       placeholder="e.g. 162.141.0.29"
+                                       autocomplete="off" spellcheck="false">
+                                <input type="number" id="ip_subnet" name="subnet" class="form-control ipc-mono"
+                                       value="{{ current_ip_subnet }}" min="0" max="32" title="Subnet (0-32)">
+                            </div>
+                            <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                Enter an IPv4 address and the subnet (default <code>/32</code> for routed NICs).
+                                <strong>Leave the IP blank to remove the currently attached public IP.</strong>
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Host Parent Interface</label>
+                            <input type="text" id="ip_parent_iface" name="parent_iface" class="form-control ipc-mono"
+                                   value="{{ current_ip_parent_iface }}"
+                                   placeholder="eth0" autocomplete="off">
+                            <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                The host NIC the routed IP will be parented on (the value used for <code>parent=</code> on the LXC NIC).
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">IP Alias (Display Name)</label>
+                            <input type="text" id="ip_alias" name="ip_alias" class="form-control"
+                                   value="{{ vps.ip_alias or '' }}"
+                                   placeholder="e.g. vps1.example.com">
+                            <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                Optional display name shown in the VPS list / detail page. Does not affect networking.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="ipc-card-inner">
+                        <h5><i class="fas fa-terminal"></i> Commands that will run</h5>
+                        <p style="color: var(--text-muted); font-size: .82rem; margin: 0 0 .6rem 0;">
+                            The exact host-side commands that will execute on the node when you save. Updates live as you type.
+                        </p>
+                        <div class="ipc-cmd" id="ipc_cmdPreview">
+                            <span style="color: var(--text-muted);"># IP unchanged — nothing will run.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: help -->
+                <div>
+                    <div class="ipc-card-inner">
+                        <h5><i class="fas fa-circle-info"></i> How Routed IPs Work</h5>
+                        <p style="color: var(--text-secondary); font-size: .85rem; line-height: 1.6; margin: 0 0 .5rem 0;">
+                            The panel uses LXC's <strong>routed</strong> NIC type. A device named <span class="ipc-mono">pubip</span> is attached to the container with the public IP, which appears inside the guest as <span class="ipc-mono">eth1</span>. Outbound traffic uses the host's parent interface; inbound traffic is routed by the upstream gateway to this host.
+                        </p>
+                        <ul style="margin: .5rem 0 0 1.25rem; color: var(--text-secondary); font-size: .82rem; line-height: 1.7;">
+                            <li>The container will be restarted automatically after the device change.</li>
+                            <li>The IP must already be routed (or assignable) to this host.</li>
+                            <li>Default mask is <span class="ipc-mono">/32</span> — that's standard for routed NICs.</li>
+                            <li>Subnet + parent interface are saved in metadata so reinstalls reuse them.</li>
+                        </ul>
+                    </div>
+
+                    <div class="ipc-card-inner">
+                        <h5><i class="fas fa-shield-halved"></i> Notes</h5>
+                        <div class="ipc-note warn">
+                            This edit page is admin-only. Regular users cannot change a VPS's public IP — they can only see it on their dashboard.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div><!-- /#ipc_section -->
+        </div>
+
+        <!-- Bandwidth Quota -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background-color: var(--bg-secondary); border-radius: var(--border-radius-sm); border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 1rem;"><i class="fas fa-database"></i> Bandwidth Quota</h4>
+            <div class="grid grid-2">
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label"><i class="fas fa-database"></i> Bandwidth Quota (GB)</label>
+                    <input type="number" name="bandwidth_quota_gb" class="form-control" value="{{ vps.get('bandwidth_quota_gb', 0) }}" min="0" max="10000" placeholder="0 = Unlimited">
+                    <small style="color: var(--text-muted);">Total bandwidth limit in GB (0 = unlimited)</small>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center;">
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: var(--text-muted);">Current Usage:</span>
+                        <span style="font-weight: 600;">{{ (vps.get('bandwidth_used_gb', 0)|round(2)|string + ' GB') if vps.get('bandwidth_used_gb', 0) else '0 GB' }}</span>
+                    </div>
+                    {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: var(--text-muted);">Usage Percentage:</span>
+                        {% set usage_percent = ((vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) * 100) if vps.get('bandwidth_quota_gb', 0) > 0 else 0 %}
+                        <span style="font-weight: 600; color: {% if usage_percent > 90 %}var(--accent-danger){% elif usage_percent > 75 %}var(--accent-warning){% else %}var(--accent-success){% endif %};">{{ usage_percent|round(1) }}%</span>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <span style="color: var(--text-muted);">Last Reset:</span>
+                        <span style="font-weight: 600;">{{ vps.get('bandwidth_reset_date') if vps.get('bandwidth_reset_date') else 'Never' }}</span>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-info-circle" style="color: var(--accent-info);"></i>
+                    <strong>Bandwidth Quota Information</strong>
+                </div>
+                <ul style="margin: 0; padding-left: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    <li>Bandwidth quota limits total data transfer (upload + download)</li>
+                    <li>VPS will be monitored and may be suspended when quota is exceeded</li>
+                    <li>Usage is tracked from container network interface statistics</li>
+                    <li>Changes will be applied immediately if the VPS is running</li>
+                    <li>Set quota to 0 for unlimited bandwidth</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Auto-Expiration Settings -->
+        <div class="card" style="margin: 1.5rem 0;">
+            <div class="card-header">
+                <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-clock"></i>
+                    Auto-Expiration Settings
+                </h4>
+            </div>
+
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input
+                            type="checkbox"
+                            name="auto_suspend_enabled"
+                            id="auto_suspend_enabled"
+                            style="width: auto; margin: 0;"
+                            {% if vps.get('auto_suspend_enabled', 0) %}checked{% endif %}
+                        >
+                        Enable Auto-Suspend on Expiration
+                    </label>
+
+                    <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                        Automatically suspend this VPS when its expiration date is reached.
+                    </small>
+                </div>
+
+                <div
+                    id="expiration-settings"
+                    style="{% if vps.get('auto_suspend_enabled', 0) %}display: block;{% else %}display: none;{% endif %} margin-top: 1rem;"
+                >
+                    <div class="grid grid-2">
+
+                        <div class="form-group">
+                            <label class="form-label">Expiration Days</label>
+
+                            <input
+                                type="number"
+                                name="expiration_days"
+                                id="expiration_days"
+                                class="form-control"
+                                value="{{ vps.get('expiration_days', 30) or 30 }}"
+                                min="1"
+                                max="3650"
+                            >
+
+                            <small style="color: var(--text-muted);">
+                                Number of days from now until the VPS expires.
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Current Expiration Date</label>
+
+                            <input
+                                type="text"
+                                class="form-control"
+                                value="{{ vps.get('expires_at') or 'Not set' }}"
+                                readonly
+                                style="background-color: var(--bg-tertiary);"
+                            >
+
+                            <small style="color: var(--text-muted);">
+                                Saving with Auto-Expiration enabled renews the VPS from now.
+                            </small>
+                        </div>
+
+                    </div>
+
+                    <div style="
+                        padding: 0.75rem;
+                        background-color: var(--bg-tertiary);
+                        border-radius: var(--border-radius-sm);
+                        border-left: 3px solid var(--accent-warning);
+                    ">
+                        <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <i
+                                class="fas fa-info-circle"
+                                style="color: var(--accent-warning); margin-top: 0.25rem;"
+                            ></i>
+
+                            <div>
+                                <strong>How Auto-Expiration Works:</strong>
+
+                                <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                                    <li>VPS automatically suspends after the expiration date.</li>
+                                    <li>Warning notification can be sent before expiration.</li>
+                                    <li>Changing the expiration days renews the VPS from now.</li>
+                                    <li>Expired VPS can be renewed by the admin.</li>
+                                    <li>Disable this option to remove auto-expiration.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Snapshot Limit -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background-color: var(--bg-secondary); border-radius: var(--border-radius-sm); border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 1rem;"><i class="fas fa-camera"></i> Snapshot Limit</h4>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label"><i class="fas fa-camera"></i> Maximum Snapshots</label>
+                <input type="number" name="snapshot_limit" class="form-control" value="{{ vps.get('snapshot_limit', 5) }}" min="0" max="50" placeholder="5">
+                <small style="color: var(--text-muted);">Maximum number of snapshots user can create for this VPS</small>
+            </div>
+            <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-info-circle" style="color: var(--accent-info);"></i>
+                    <strong>Snapshot Limit Information</strong>
+                </div>
+                <ul style="margin: 0; padding-left: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    <li>Snapshots allow users to backup and restore VPS state</li>
+                    <li>Users must delete old snapshots before creating new ones when limit is reached</li>
+                    <li>Automatic snapshots count towards this limit</li>
+                    <li>Set to 0 to disable snapshots for this VPS</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Port Allocation (shown when changing owner) -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background-color: var(--bg-secondary); border-radius: var(--border-radius-sm); border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 1rem;"><i class="fas fa-plug"></i> Port Allocation</h4>
+            <div class="grid grid-2">
+                <div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: var(--text-muted);">Current Owner Allocation:</span>
+                        <span style="font-weight: 600;">{{ current_user_used }} / {{ current_user_allocation }} ports used</span>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="color: var(--text-muted);">VPS Port Forwards:</span>
+                        <span style="font-weight: 600;">{{ vps_forwards|length }} ports</span>
+                    </div>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label class="form-label">Additional Ports for New Owner</label>
+                    <input type="number" name="additional_ports" class="form-control" value="0" min="0" max="100" placeholder="0">
+                    <small style="color: var(--text-muted);">Extra ports to allocate if changing owner (in addition to transferred ports)</small>
+                </div>
+            </div>
+            
+            {% if vps_forwards %}
+            <div style="margin-top: 1rem;">
+                <h5 style="margin-bottom: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);">Current Port Forwards (will be transferred to new owner)</h5>
+                <div style="max-height: 200px; overflow-y: auto;">
+                    <table class="table" style="font-size: 0.875rem;">
+                        <thead>
+                            <tr>
+                                <th>VPS Port</th>
+                                <th>Host Port</th>
+                                <th>Protocol</th>
+                                <th>Description</th>
+                                <th>Hits</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for forward in vps_forwards %}
+                            <tr>
+                                <td><span class="badge badge-info">{{ forward.vps_port }}</span></td>
+                                <td><span class="badge badge-success">{{ forward.host_port }}</span></td>
+                                <td>
+                                    {% if 'tcp' in forward.protocol and 'udp' in forward.protocol %}
+                                        <span class="badge badge-info" style="margin-right: 0.25rem;">TCP</span>
+                                        <span class="badge badge-success">UDP</span>
+                                    {% else %}
+                                        <span class="badge">{{ forward.protocol|upper }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ forward.description or '-' }}</td>
+                                <td>{{ forward.hits }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px; text-align: center; color: var(--text-secondary);">
+                <i class="fas fa-info-circle"></i> No port forwards configured for this VPS
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Current Status -->
+        <div style="margin: 1.5rem 0; padding: 1rem; background-color: var(--bg-tertiary); border-radius: var(--border-radius-sm);">
+            <h4 style="margin-bottom: 1rem;">Current Configuration</h4>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                <div>
+                    <span style="color: var(--text-muted);">Created:</span>
+                    <span>{{ vps.created_at }}</span>
+                </div>
+                <div>
+                    <span style="color: var(--text-muted);">Last Started:</span>
+                    <span>{{ vps.last_started if vps.last_started else 'Never' }}</span>
+                </div>
+                <div>
+                    <span style="color: var(--text-muted);">Whitelisted:</span>
+                    <span>{{ 'Yes' if vps.whitelisted else 'No' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Suspension History -->
+        {% if vps.suspension_history %}
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="margin-bottom: 1rem;">Suspension History</h4>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Reason</th>
+                            <th>By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in vps.suspension_history %}
+                        <tr>
+                            <td>{{ entry.time }}</td>
+                            <td>{{ entry.reason }}</td>
+                            <td>{{ entry.by }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div style="display: flex; gap: 1rem; justify-content: space-between; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.5rem;">
+                {% if not vps.whitelisted %}
+                    {% if vps.suspended %}
+                    <button type="button" class="btn btn-success" onclick="unsuspendVPS()">
+                        <i class="fas fa-check"></i> Unsuspend VPS
+                    </button>
+                    {% else %}
+                    <button type="button" class="btn btn-warning" onclick="suspendVPS()">
+                        <i class="fas fa-ban"></i> Suspend VPS
+                    </button>
+                    {% endif %}
+                {% endif %}
+                
+                <button type="button" class="btn btn-outline" onclick="toggleWhitelist()">
+                    <i class="fas fa-{{ 'check-circle' if vps.whitelisted else 'circle' }}"></i>
+                    {{ 'Remove from Whitelist' if vps.whitelisted else 'Add to Whitelist' }}
+                </button>
+                
+                <button type="button" class="btn" onclick="showMigrateModal()" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none;">
+                    <i class="fas fa-exchange-alt"></i> Migrate VPS
+                </button>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="{{ url_for('admin_vps') }}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Migration Modal -->
+<div id="migrateModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fas fa-exchange-alt" style="color: #667eea;"></i>
+            Migrate VPS to Another Node
+        </h3>
+        
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(102, 126, 234, 0.1); border: 1px solid rgba(102, 126, 234, 0.2); border-radius: 8px;">
+            <div style="display: flex; align-items: start; gap: 0.75rem;">
+                <i class="fas fa-info-circle" style="color: #667eea; margin-top: 0.25rem;"></i>
+                <div style="font-size: 0.9rem;">
+                    <strong>Live Migration Process:</strong>
+                    <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                        <li>Container will be stopped gracefully</li>
+                        <li>All data will be copied to the target node</li>
+                        <li>Port forwards will be recreated automatically</li>
+                        <li>Container will be started on the new node</li>
+                        <li>Old container will be deleted from source node</li>
+                        <li>Database records will be updated</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Current Node</label>
+            <input type="text" class="form-control" id="currentNodeDisplay" readonly style="background: var(--bg-tertiary); font-weight: 600;">
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Target Node <span style="color: var(--accent-danger);">*</span></label>
+            <select id="targetNodeSelect" class="form-control">
+                <option value="">Select target node...</option>
+                {% for node in nodes %}
+                    {% if node.id != vps.node_id %}
+                    <option value="{{ node.id }}" data-used="{{ node.used_vps }}" data-total="{{ node.total_vps }}">
+                        {{ node.name }} ({{ node.location }}) - {{ node.used_vps }}/{{ node.total_vps }} VPS
+                    </option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px;">
+            <div style="display: flex; align-items: start; gap: 0.75rem;">
+                <i class="fas fa-exclamation-triangle" style="color: var(--accent-warning); margin-top: 0.25rem;"></i>
+                <div style="font-size: 0.9rem;">
+                    <strong>Important:</strong>
+                    <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                        <li>Migration may take several minutes depending on VPS size</li>
+                        <li>VPS will be temporarily unavailable during migration</li>
+                        <li>Ensure target node has sufficient resources</li>
+                        <li>This action cannot be undone</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" class="btn btn-outline" onclick="closeMigrateModal()">Cancel</button>
+            <button type="button" class="btn" onclick="startMigration()" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none;">
+                <i class="fas fa-exchange-alt"></i> Start Migration
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 1rem;
+    }
+    
+    .modal-content {
+        background: var(--card-bg);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        max-width: 600px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Suspend VPS
+    async function suspendVPS() {
+        const reason = prompt('Enter suspension reason:', 'Admin action');
+        if (reason === null) return;
+
+        showLoading();
+
+        try {
+            const response = await fetch('/admin/vps/{{ vps.id }}/suspend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ reason: reason })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('VPS suspended successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Failed to suspend VPS', 'danger');
+            }
+        } catch (error) {
+            console.error('Suspend error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        } finally {
+            hideLoading();
+        }
+    }
+
+    // Unsuspend VPS
+    async function unsuspendVPS() {
+        if (!confirm('Unsuspend this VPS?')) {
+            return;
+        }
+
+        showLoading();
+
+        try {
+            const response = await fetch('/admin/vps/{{ vps.id }}/unsuspend', {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('VPS unsuspended successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Failed to unsuspend VPS', 'danger');
+            }
+        } catch (error) {
+            console.error('Unsuspend error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        } finally {
+            hideLoading();
+        }
+    }
+
+    // Toggle whitelist
+    async function toggleWhitelist() {
+        const currentState = {{ 'true' if vps.whitelisted else 'false' }};
+        const newState = !currentState;
+        
+        showLoading();
+
+        try {
+            const response = await fetch('/admin/vps/{{ vps.id }}/whitelist', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ whitelist: newState })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('Whitelist updated successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(result.error || 'Failed to update whitelist', 'danger');
+            }
+        } catch (error) {
+            console.error('Whitelist error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Show migrate modal
+    function showMigrateModal() {
+        // Find and display current node name
+        const currentNodeId = {{ vps.node_id }};
+        const nodes = {{ nodes|tojson }};
+        const currentNode = nodes.find(n => n.id === currentNodeId);
+        
+        if (currentNode) {
+            document.getElementById('currentNodeDisplay').value = `${currentNode.name} (${currentNode.location})`;
+        } else {
+            document.getElementById('currentNodeDisplay').value = 'Node ID: ' + currentNodeId;
+        }
+        
+        document.getElementById('migrateModal').style.display = 'flex';
+    }
+    
+    // Close migrate modal
+    function closeMigrateModal() {
+        document.getElementById('migrateModal').style.display = 'none';
+    }
+    
+    // Start migration
+    async function startMigration() {
+        const targetNodeId = document.getElementById('targetNodeSelect').value;
+        
+        if (!targetNodeId) {
+            showToast('Please select a target node', 'warning');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to migrate this VPS? The VPS will be temporarily unavailable during migration.')) {
+            return;
+        }
+        
+        closeMigrateModal();
+        showLoading();
+        
+        try {
+            const response = await fetch('/admin/vps/{{ vps.id }}/migrate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ target_node_id: parseInt(targetNodeId) })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast('Migration started! Redirecting to progress page...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/admin/vps';
+                }, 1500);
+            } else {
+                showToast(result.error || 'Failed to start migration', 'danger');
+            }
+        } catch (error) {
+            console.error('Migration error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        } finally {
+            hideLoading();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    //  Routed-IP live preview (mirrors /vps/<id>/ipconfig + admin
+    //  create page). Shows the exact host-side commands that will
+    //  run when the admin clicks "Save Changes", updating live as
+    //  the IP / subnet / parent fields are edited. Pure preview —
+    //  the actual request is the normal form POST.
+    // ---------------------------------------------------------------
+    const IPC_CURRENT_IP     = {{ (vps.ip_address or '') | tojson }};
+    const IPC_CURRENT_SUBNET = {{ current_ip_subnet | default("") | tojson }};
+    const IPC_CURRENT_PARENT = {{ current_ip_parent_iface|default(none)|tojson }};
+    const IPC_CONTAINER_NAME = {{ vps.container_name | tojson }};
+
+    function ipcEscapeHtml(s) {
+        return (s || '').replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    }
+
+    function ipcReadForm() {
+        const ip      = (document.getElementById('ip_address').value || '').trim();
+        const subnet  = (document.getElementById('ip_subnet').value || '32').toString().trim().replace(/^\//, '');
+        const parent  = (document.getElementById('ip_parent_iface').value || 'eth0').trim();
+        return { ip, subnet, parent };
+    }
+
+    function ipcUpdatePreview() {
+        const f = ipcReadForm();
+        const cmdEl = document.getElementById('ipc_cmdPreview');
+
+        // Decide which path the backend will take. Mirrors
+        // admin_vps_edit() in hvm.py:
+        //   * add    — old empty, new set
+        //   * change — both set, addresses differ (or subnet/parent
+        //              changed even with same IP)
+        //   * remove — old set, new empty
+        //   * noop   — no change at all
+        const ipChanged     = f.ip !== IPC_CURRENT_IP;
+        const subnetChanged = f.subnet !== String(IPC_CURRENT_SUBNET);
+        const parentChanged = f.parent !== String(IPC_CURRENT_PARENT);
+
+        let action;
+        if (!f.ip && !IPC_CURRENT_IP) {
+            action = 'noop';
+        } else if (!f.ip && IPC_CURRENT_IP) {
+            action = 'remove';
+        } else if (f.ip && !IPC_CURRENT_IP) {
+            action = 'add';
+        } else if (ipChanged) {
+            action = 'change';
+        } else if (subnetChanged || parentChanged) {
+            action = 'reattach';
+        } else {
+            action = 'noop';
+        }
+
+        const c = ipcEscapeHtml(IPC_CONTAINER_NAME);
+        let html = '';
+
+        if (action === 'add') {
+            html =
+                '<span class="h"># 1) Add IP/subnet to host parent interface</span>\n' +
+                'ip addr add <span class="ip-ok">' + ipcEscapeHtml(f.ip) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent) + '\n\n' +
+                '<span class="h"># 2) Attach routed NIC to container (creates eth1 inside)</span>\n' +
+                '<span class="lxc">lxc</span> config device add ' + c + ' pubip nic nictype=routed parent=' + ipcEscapeHtml(f.parent) + ' ipv4.address=<span class="ip-ok">' + ipcEscapeHtml(f.ip) + '</span> name=eth1\n\n' +
+                '<span class="h"># 3) Restart container so the new NIC is visible inside</span>\n' +
+                '<span class="lxc">lxc</span> restart ' + c + '\n\n' +
+                '<span class="h"># 4) Remove IP from host parent interface (now routed to container)</span>\n' +
+                'ip addr del <span class="ip-ok">' + ipcEscapeHtml(f.ip) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent);
+        } else if (action === 'change' || action === 'reattach') {
+            const oldIp     = IPC_CURRENT_IP || '<old_ip>';
+            const oldSubnet = IPC_CURRENT_SUBNET || '32';
+            const oldParent = IPC_CURRENT_PARENT || 'eth0';
+            html =
+                '<span class="h"># 1) Remove the old routed device + host route</span>\n' +
+                '<span class="lxc">lxc</span> config device remove ' + c + ' pubip\n' +
+                'ip addr del <span class="ip-ok">' + ipcEscapeHtml(oldIp) + '/' + ipcEscapeHtml(oldSubnet) + '</span> dev ' + ipcEscapeHtml(oldParent) + '\n\n' +
+                '<span class="h"># 2) Add the new host IP and attach routed device</span>\n' +
+                'ip addr add <span class="ip-ok">' + ipcEscapeHtml(f.ip) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent) + '\n' +
+                '<span class="lxc">lxc</span> config device add ' + c + ' pubip nic nictype=routed parent=' + ipcEscapeHtml(f.parent) + ' ipv4.address=<span class="ip-ok">' + ipcEscapeHtml(f.ip) + '</span> name=eth1\n\n' +
+                '<span class="h"># 3) Restart container</span>\n' +
+                '<span class="lxc">lxc</span> restart ' + c + '\n\n' +
+                '<span class="h"># 4) Strip the new IP off the host (it now belongs to the container)</span>\n' +
+                'ip addr del <span class="ip-ok">' + ipcEscapeHtml(f.ip) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent);
+        } else if (action === 'remove') {
+            const oldIp     = IPC_CURRENT_IP || '<old_ip>';
+            const oldSubnet = IPC_CURRENT_SUBNET || '32';
+            const oldParent = IPC_CURRENT_PARENT || 'eth0';
+            html =
+                '<span class="h"># 1) Remove routed NIC from container</span>\n' +
+                '<span class="lxc">lxc</span> config device remove ' + c + ' pubip\n\n' +
+                '<span class="h"># 2) Remove IP from host parent interface (if still present)</span>\n' +
+                'ip addr del <span class="ip-ok">' + ipcEscapeHtml(oldIp) + '/' + ipcEscapeHtml(oldSubnet) + '</span> dev ' + ipcEscapeHtml(oldParent);
+        } else {
+            html = '<span style="color: var(--text-muted);"># IP unchanged — nothing to do.</span>';
+        }
+        cmdEl.innerHTML = html;
+    }
+
+    ['ip_address', 'ip_subnet', 'ip_parent_iface'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', ipcUpdatePreview);
+    });
+
+    // Master toggle for the IP-config section.
+    // When the admin unchecks it, we:
+    //   * disable + hide the IP form,
+    //   * on submit (handled below via a `submit` listener on the
+    //     <form>), clear the IP field so the backend's "remove" path
+    //     kicks in. If the VPS already had no IP we just send an
+    //     empty value, which is the noop case.
+    function ipcApplyToggleState() {
+        const on = document.getElementById('ipc_configure').checked;
+        const section = document.getElementById('ipc_section');
+        section.style.display = on ? '' : 'none';
+        ['ip_address', 'ip_subnet', 'ip_parent_iface', 'ip_alias'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !on;
+        });
+        if (on) {
+            ipcUpdatePreview();
+        }
+    }
+    document.getElementById('ipc_configure').addEventListener('change', ipcApplyToggleState);
+    ipcApplyToggleState();
+
+    // Submit-time guard: if the master toggle is OFF, force the
+    // ip_address field to empty before the form posts so the
+    // backend takes the remove / noop branch even though the
+    // disabled inputs wouldn't have submitted their values anyway.
+    // (Browsers don't send disabled-input values, but we re-enable
+    // ip_address briefly with an empty value so the field key still
+    // exists in request.form — admin_vps_edit() differentiates
+    // between "not in form" and "empty string in form".)
+    const editForm = document.querySelector('form[action$="/edit"]');
+    if (editForm) {
+        editForm.addEventListener('submit', function () {
+            if (!document.getElementById('ipc_configure').checked) {
+                const ipField = document.getElementById('ip_address');
+                if (ipField) {
+                    ipField.disabled = false;
+                    ipField.value = '';
+                }
+                // Subnet + parent stay disabled (browser drops them);
+                // the backend already defaults them from metadata when
+                // missing, which is correct for the remove path.
+            }
+        });
+    }
+
+    // Auto-Expiration toggle for Admin VPS Edit page
+    const expirationToggle = document.getElementById('auto_suspend_enabled');
+    const expirationSettings = document.getElementById('expiration-settings');
+
+    function updateExpirationSettings() {
+        if (!expirationToggle || !expirationSettings) return;
+
+        if (expirationToggle.checked) {
+            expirationSettings.style.display = 'block';
+        } else {
+            expirationSettings.style.display = 'none';
+        }
+    }
+
+    if (expirationToggle) {
+        expirationToggle.addEventListener('change', updateExpirationSettings);
+        updateExpirationSettings();
+    }
+
+</script>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Live Stats Management - {{ panel_name }}{% endblock %}
+
+{% block header_title %}Live Stats Management{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_dashboard') }}" class="breadcrumb-item">Admin</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Live Stats</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <h2 style="font-size: 1.25rem; margin: 0;">Live Statistics System</h2>
+    <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-outline" onclick="refreshStatus()">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+        <button class="btn btn-warning" onclick="clearCache()">
+            <i class="fas fa-trash"></i> Clear Cache
+        </button>
+        <button class="btn btn-primary" onclick="restartLiveStats()">
+            <i class="fas fa-restart"></i> Restart
+        </button>
+    </div>
+</div>
+
+<!-- Status Overview -->
+<div class="grid grid-3" style="margin-bottom: 2rem;">
+    <div class="card">
+        <div class="stat-icon" id="statusIcon" style="width: 48px; height: 48px;">
+            <i class="fas fa-circle"></i>
+        </div>
+        <div style="margin-top: 1rem;">
+            <div style="font-size: 0.875rem; color: var(--text-muted);">System Status</div>
+            <div style="font-size: 1.25rem; font-weight: 600;" id="systemStatus">Loading...</div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="stat-icon info" style="width: 48px; height: 48px;">
+            <i class="fas fa-database"></i>
+        </div>
+        <div style="margin-top: 1rem;">
+            <div style="font-size: 0.875rem; color: var(--text-muted);">Cache Entries</div>
+            <div style="font-size: 1.25rem; font-weight: 600;" id="cacheEntries">0</div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="stat-icon success" style="width: 48px; height: 48px;">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div style="margin-top: 1rem;">
+            <div style="font-size: 0.875rem; color: var(--text-muted);">Updates/Min</div>
+            <div style="font-size: 1.25rem; font-weight: 600;" id="updatesPerMin">0</div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Metrics -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Performance Metrics</h3>
+    
+    <div class="grid grid-2">
+        <div>
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.875rem;">Cache Hit Rate</span>
+                    <span style="font-size: 0.875rem;" id="cacheHitRate">0%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar success" id="cacheHitBar" style="width: 0%;"></div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.875rem;">Error Rate</span>
+                    <span style="font-size: 0.875rem;" id="errorRate">0%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar danger" id="errorRateBar" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <div class="grid grid-2" style="gap: 1rem;">
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Total Updates</div>
+                    <div style="font-weight: 600;" id="totalUpdates">0</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Cache Hits</div>
+                    <div style="font-weight: 600;" id="cacheHits">0</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Cache Misses</div>
+                    <div style="font-weight: 600;" id="cacheMisses">0</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Errors</div>
+                    <div style="font-weight: 600;" id="totalErrors">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Configuration</h3>
+    
+    <div class="grid grid-2">
+        <div>
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">VPS Update Interval</div>
+                <div style="font-weight: 600;">3 seconds</div>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Node Update Interval</div>
+                <div style="font-weight: 600;">10 seconds</div>
+            </div>
+        </div>
+        <div>
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Cache TTL</div>
+                <div style="font-weight: 600;">30 seconds</div>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Batch Size</div>
+                <div style="font-weight: 600;">10 VPS</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let statusRefreshInterval;
+
+function refreshStatus() {
+    fetch('/api/live-stats/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateStatusDisplay(data);
+            } else {
+                showToast('Error loading status: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to load status', 'danger');
+        });
+}
+
+function updateStatusDisplay(data) {
+    const statusIcon = document.getElementById('statusIcon');
+    const systemStatus = document.getElementById('systemStatus');
+    
+    if (data.available && data.running) {
+        statusIcon.className = 'stat-icon success';
+        systemStatus.textContent = 'Running';
+    } else if (data.available && !data.running) {
+        statusIcon.className = 'stat-icon warning';
+        systemStatus.textContent = 'Stopped';
+    } else {
+        statusIcon.className = 'stat-icon danger';
+        systemStatus.textContent = 'Not Available';
+    }
+    
+    // Update cache entries
+    const vpsCache = data.cache_size?.vps_stats || 0;
+    const nodeCache = data.cache_size?.node_stats || 0;
+    document.getElementById('cacheEntries').textContent = vpsCache + nodeCache;
+    
+    // Update metrics
+    const metrics = data.metrics || {};
+    document.getElementById('totalUpdates').textContent = metrics.total_updates || 0;
+    document.getElementById('cacheHits').textContent = metrics.cache_hits || 0;
+    document.getElementById('cacheMisses').textContent = metrics.cache_misses || 0;
+    document.getElementById('totalErrors').textContent = metrics.errors || 0;
+    
+    // Calculate rates
+    const totalRequests = (metrics.cache_hits || 0) + (metrics.cache_misses || 0);
+    const cacheHitRate = totalRequests > 0 ? ((metrics.cache_hits || 0) / totalRequests * 100) : 0;
+    const errorRate = totalRequests > 0 ? ((metrics.errors || 0) / totalRequests * 100) : 0;
+    
+    document.getElementById('cacheHitRate').textContent = cacheHitRate.toFixed(1) + '%';
+    document.getElementById('cacheHitBar').style.width = cacheHitRate + '%';
+    
+    document.getElementById('errorRate').textContent = errorRate.toFixed(1) + '%';
+    document.getElementById('errorRateBar').style.width = errorRate + '%';
+    
+    // Updates per minute (approximate)
+    const updatesPerMin = (metrics.total_updates || 0) * 12; // Rough estimate
+    document.getElementById('updatesPerMin').textContent = updatesPerMin;
+}
+
+function clearCache() {
+    if (!confirm('Are you sure you want to clear the live stats cache?')) {
+        return;
+    }
+    
+    fetch('/api/live-stats/clear-cache', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                refreshStatus();
+            } else {
+                showToast('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to clear cache', 'danger');
+        });
+}
+
+function restartLiveStats() {
+    if (!confirm('Are you sure you want to restart the live stats system?')) {
+        return;
+    }
+    
+    fetch('/api/live-stats/restart', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(refreshStatus, 2000); // Refresh after 2 seconds
+            } else {
+                showToast('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to restart live stats', 'danger');
+        });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    refreshStatus();
+    
+    // Auto-refresh every 10 seconds
+    statusRefreshInterval = setInterval(refreshStatus, 10000);
+});
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (statusRefreshInterval) {
+        clearInterval(statusRefreshInterval);
+    }
+});
+</script>
+{% endblock %}

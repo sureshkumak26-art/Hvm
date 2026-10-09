@@ -1,0 +1,1964 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - {{ panel_name }}{% endblock %}
+
+{% block header_title %}My Profile{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Profile</span>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Premium Profile Page Styles */
+    :root {
+        /* --gradient-primary is now defined globally in base.html so the user's
+           theme customization propagates; only keep page-specific gradients. */
+        --gradient-success: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        --gradient-warning: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        --gradient-info: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .profile-container {
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Profile Hero Card */
+    .profile-hero {
+        background: var(--gradient-primary);
+        border-radius: 20px;
+        padding: 3rem 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 15px 40px rgba(102, 126, 234, 0.3);
+    }
+    
+    .profile-hero::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+        animation: float 6s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-20px) rotate(5deg); }
+    }
+    
+    .profile-hero-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+    
+    .profile-avatar-wrapper {
+        position: relative;
+    }
+    
+    .profile-avatar-large {
+        width: 140px;
+        height: 140px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+        font-weight: 700;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+    }
+    
+    .profile-avatar-large img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .avatar-edit-btn {
+        position: absolute;
+        bottom: -10px;
+        right: -10px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: white;
+        color: #667eea;
+        border: 3px solid #667eea;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.125rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    
+    .avatar-edit-btn:hover {
+        transform: scale(1.1) rotate(15deg);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    }
+    
+    .profile-info {
+        flex: 1;
+    }
+    
+    .profile-name {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    
+    .profile-email {
+        font-size: 1.125rem;
+        opacity: 0.95;
+        margin-bottom: 1rem;
+    }
+    
+    .profile-badges {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    
+    .profile-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.875rem;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .profile-badge.admin {
+        background: rgba(239, 68, 68, 0.3);
+        border-color: rgba(239, 68, 68, 0.5);
+    }
+    
+    /* Profile Grid */
+    .profile-grid {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    /* Info Card */
+    .info-card-premium {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        min-width: 0;
+        overflow: hidden;
+    }
+    
+    .info-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid var(--border-color);
+    }
+    
+    .info-card-header i {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--gradient-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    
+    .info-card-header h3 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .info-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border-color);
+        gap: 1rem;
+        min-width: 0;
+    }
+    
+    .info-item:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--text-muted);
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+    
+    .info-label i {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(102, 126, 234, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #667eea;
+        flex-shrink: 0;
+    }
+    
+    .info-value {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        min-width: 0;
+        max-width: 100%;
+        justify-content: flex-end;
+    }
+    
+    .api-key-display {
+        padding: 0.5rem 1rem;
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #667eea;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+        white-space: normal;
+        line-height: 1.4;
+    }
+    
+    .icon-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .icon-btn:hover {
+        background: var(--gradient-primary);
+        color: white;
+        border-color: transparent;
+        transform: translateY(-2px);
+    }
+    
+    .discord-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        background: #5865F2;
+        color: white;
+        border: none;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+    }
+    
+    .discord-btn:hover {
+        background: #4752C4;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(88, 101, 242, 0.3);
+    }
+    
+    /* Edit Form */
+    .edit-form-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .form-grid-premium {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-group-premium {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .form-label-premium {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-label-premium i {
+        color: #667eea;
+    }
+    
+    .form-input-premium {
+        padding: 0.875rem 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+    }
+    
+    .form-input-premium:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+    
+    .btn-premium {
+        padding: 0.875rem 2rem;
+        border-radius: 12px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-premium.primary {
+        background: var(--gradient-primary);
+        color: white;
+    }
+    
+    .btn-premium.primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-premium.danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+    }
+    
+    .btn-premium.danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+    }
+    
+    /* Activity Table */
+    .activity-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        overflow: hidden;
+    }
+    
+    .activity-header {
+        padding: 2rem;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .activity-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .activity-title i {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: var(--gradient-primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    
+    .activity-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    
+    .activity-table thead th {
+        padding: 1.25rem 1.5rem;
+        text-align: left;
+        font-weight: 700;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-muted);
+        background: rgba(102, 126, 234, 0.03);
+        border-bottom: 2px solid var(--border-color);
+    }
+    
+    .activity-table tbody tr {
+        transition: all 0.3s ease;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .activity-table tbody tr:hover {
+        background: rgba(102, 126, 234, 0.05);
+    }
+    
+    .activity-table tbody td {
+        padding: 1.25rem 1.5rem;
+        vertical-align: middle;
+    }
+    
+    .action-badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 0.75rem;
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Empty State */
+    .empty-state-premium {
+        text-align: center;
+        padding: 3rem 2rem;
+    }
+    
+    .empty-icon-premium {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 1rem;
+        border-radius: 50%;
+        background: rgba(102, 126, 234, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .empty-icon-premium i {
+        font-size: 2rem;
+        color: var(--text-muted);
+        opacity: 0.5;
+    }
+    
+    /* Mobile Responsive */
+    @media (max-width: 1024px) {
+        .profile-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .profile-hero {
+            padding: 2rem 1.5rem;
+        }
+        
+        .profile-hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+        
+        .profile-name {
+            font-size: 1.75rem;
+        }
+        
+        .profile-badges {
+            justify-content: center;
+        }
+        
+        .form-grid-premium {
+            grid-template-columns: 1fr;
+        }
+        
+        .form-actions {
+            flex-direction: column;
+        }
+        
+        .btn-premium {
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .activity-table {
+            display: block;
+            overflow-x: auto;
+        }
+        
+        .activity-table thead {
+            display: none;
+        }
+        
+        .activity-table tbody tr {
+            display: block;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        
+        .activity-table tbody td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border: none;
+        }
+        
+        .activity-table tbody td::before {
+            content: attr(data-label);
+            font-weight: 700;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+    }
+
+    /* ============ THEME CUSTOMIZATION CARD ============ */
+    .theme-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .theme-card .info-card-header {
+        flex-wrap: wrap;
+    }
+
+    .theme-card-sub {
+        flex-basis: 100%;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-weight: 400;
+        margin-top: 0.25rem;
+    }
+
+    .theme-section {
+        padding: 1.25rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .theme-section:last-of-type {
+        border-bottom: none;
+    }
+
+    .theme-section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 1rem;
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+    }
+
+    .theme-section-title i {
+        color: var(--accent-primary);
+    }
+
+    .theme-section-hint {
+        font-weight: 400;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-left: auto;
+    }
+
+    /* Mode cards — visual mockup style */
+    .theme-mode-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+
+    .theme-mode-card {
+        cursor: pointer;
+        position: relative;
+        display: block;
+    }
+
+    .theme-mode-card input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .theme-mode-inner {
+        position: relative;
+        overflow: hidden;
+        border-radius: 16px;
+        border: 2px solid var(--border-color);
+        background: var(--bg-secondary);
+        transition: all 0.25s ease;
+        padding: 0;
+    }
+
+    .theme-mode-inner:hover {
+        border-color: var(--accent-primary);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 22px -10px rgba(0,0,0,0.4);
+    }
+
+    /* Mini mockup inside the card */
+    .mode-mockup {
+        height: 110px;
+        display: grid;
+        grid-template-columns: 36% 1fr;
+        gap: 6px;
+        padding: 10px;
+    }
+
+    .mode-mockup-sidebar {
+        border-radius: 8px;
+        padding: 8px 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .mode-mockup-sidebar::before,
+    .mode-mockup-sidebar::after {
+        content: '';
+        display: block;
+        height: 6px;
+        border-radius: 3px;
+        background: currentColor;
+        opacity: 0.35;
+    }
+
+    .mode-mockup-sidebar .mock-active {
+        height: 8px;
+        border-radius: 4px;
+        background: linear-gradient(135deg, var(--gradient-start, #667eea), var(--gradient-end, #764ba2));
+    }
+
+    .mode-mockup-content {
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .mode-mockup-content::before {
+        content: '';
+        height: 10px;
+        width: 60%;
+        border-radius: 4px;
+        background: currentColor;
+        opacity: 0.45;
+    }
+
+    .mode-mockup-content::after {
+        content: '';
+        flex: 1;
+        border-radius: 6px;
+        background: currentColor;
+        opacity: 0.15;
+    }
+
+    .mode-mockup.dark .mode-mockup-sidebar { background: #0f1116; color: #e1e9f0; }
+    .mode-mockup.dark .mode-mockup-content { background: #1a1c20; color: #e1e9f0; }
+    .mode-mockup.dark { background: #0a0c10; }
+
+    .mode-mockup.light .mode-mockup-sidebar { background: #ffffff; color: #1a1f2c; border: 1px solid #e6e9ef; }
+    .mode-mockup.light .mode-mockup-content { background: #eef1f6; color: #1a1f2c; }
+    .mode-mockup.light { background: #f5f7fa; }
+
+    .mode-mockup.auto {
+        background: linear-gradient(135deg, #0a0c10 0%, #0a0c10 49%, #f5f7fa 51%, #f5f7fa 100%);
+    }
+    .mode-mockup.auto .mode-mockup-sidebar {
+        background: linear-gradient(135deg, #0f1116 0%, #0f1116 49%, #ffffff 51%, #ffffff 100%);
+        color: #e1e9f0;
+    }
+    .mode-mockup.auto .mode-mockup-content {
+        background: linear-gradient(135deg, #1a1c20 0%, #1a1c20 49%, #eef1f6 51%, #eef1f6 100%);
+        color: #e1e9f0;
+    }
+
+    .mode-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.65rem 1rem 0.7rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+    }
+
+    .mode-label-text {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .mode-label-text i {
+        color: var(--accent-primary);
+        font-size: 1rem;
+    }
+
+    .mode-label-sub {
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        display: block;
+        margin-top: 1px;
+    }
+
+    .mode-check {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--bg-tertiary);
+        border: 2px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: transparent;
+        font-size: 0.7rem;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .theme-mode-card input:checked + .theme-mode-inner {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25), 0 10px 25px -8px rgba(0,0,0,0.35);
+        transform: translateY(-3px);
+    }
+
+    .theme-mode-card input:checked + .theme-mode-inner .mode-check {
+        background: var(--accent-primary);
+        border-color: var(--accent-primary);
+        color: #fff;
+    }
+
+    /* Surface section "auto match" switch */
+    .surface-auto-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin-left: auto;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        padding: 0.4rem 0.75rem;
+        border-radius: 999px;
+    }
+
+    .surface-auto-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+
+    .surface-auto-toggle .switch {
+        width: 34px;
+        height: 18px;
+        border-radius: 999px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        position: relative;
+        transition: background 0.2s ease;
+    }
+    .surface-auto-toggle .switch::after {
+        content: '';
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        transition: all 0.2s ease;
+    }
+    .surface-auto-toggle input:checked + .switch {
+        background: var(--accent-primary);
+        border-color: var(--accent-primary);
+    }
+    .surface-auto-toggle input:checked + .switch::after {
+        left: 17px;
+        background: #fff;
+    }
+
+    /* Disabled surface pickers (when auto-match is on) */
+    .color-field.is-auto {
+        opacity: 0.55;
+        pointer-events: none;
+        position: relative;
+    }
+    .color-field.is-auto::after {
+        content: 'AUTO';
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: var(--accent-primary);
+        background: rgba(59, 130, 246, 0.12);
+        padding: 2px 6px;
+        border-radius: 999px;
+    }
+
+    /* Presets */
+    .preset-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .preset-card {
+        cursor: pointer;
+        background: var(--bg-secondary);
+        border: 2px solid var(--border-color);
+        border-radius: 14px;
+        padding: 0.85rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease;
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .preset-card:hover {
+        border-color: var(--accent-primary);
+        transform: translateY(-2px);
+    }
+
+    .preset-card.active {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    .preset-swatch {
+        width: 100%;
+        height: 48px;
+        border-radius: 10px;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+    }
+
+    /* Color pickers */
+    .color-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .color-field {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+    }
+
+    .color-field label {
+        display: block;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .color-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+    }
+
+    .color-input-wrap input[type="color"] {
+        width: 42px;
+        height: 42px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: transparent;
+        cursor: pointer;
+        padding: 2px;
+        flex-shrink: 0;
+    }
+
+    .color-input-wrap input[type="color"]::-webkit-color-swatch {
+        border-radius: 7px;
+        border: none;
+    }
+    .color-input-wrap input[type="color"]::-moz-color-swatch {
+        border-radius: 7px;
+        border: none;
+    }
+
+    .color-hex {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-transform: uppercase;
+    }
+
+    .gradient-preview {
+        margin-top: 0.75rem;
+        height: 60px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--gradient-start, #667eea) 0%, var(--gradient-end, #764ba2) 100%);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+    }
+
+    /* Sliders */
+    .slider-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+
+    .slider-field {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+    }
+
+    .slider-field label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 0.6rem;
+        font-weight: 600;
+    }
+
+    .slider-value {
+        color: var(--accent-primary);
+        font-family: 'Courier New', monospace;
+        font-weight: 700;
+    }
+
+    .slider-field input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent-primary);
+        cursor: pointer;
+    }
+
+    /* Live preview box */
+    .theme-preview-box {
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 1.25rem;
+        background: var(--bg-secondary);
+    }
+
+    .preview-header {
+        background: linear-gradient(135deg, var(--gradient-start, #667eea) 0%, var(--gradient-end, #764ba2) 100%);
+        color: #fff;
+        padding: 0.85rem 1rem;
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .preview-title {
+        font-weight: 700;
+    }
+
+    .preview-badge {
+        background: rgba(255,255,255,0.25);
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .preview-text {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        margin-bottom: 0.85rem;
+    }
+
+    .preview-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .preview-btn {
+        padding: 0.45rem 0.9rem;
+        border-radius: 8px;
+        border: none;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+    .preview-btn.primary { background: var(--accent-primary); }
+    .preview-btn.success { background: var(--accent-success); }
+    .preview-btn.warning { background: var(--accent-warning); }
+    .preview-btn.danger  { background: var(--accent-danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <!-- Profile Hero -->
+    <div class="profile-hero">
+        <div class="profile-hero-content">
+            <div class="profile-avatar-wrapper">
+                <div class="profile-avatar-large">
+                    {% if current_user.profile_picture %}
+                    <img src="{{ current_user.profile_picture }}" alt="{{ current_user.username }}">
+                    {% else %}
+                    <span>{{ current_user.username[:1].upper() }}</span>
+                    {% endif %}
+                </div>
+                <button class="avatar-edit-btn" onclick="document.getElementById('profilePicInput').click()">
+                    <i class="fas fa-camera"></i>
+                </button>
+                <input type="file" id="profilePicInput" accept="image/*" style="display: none;" onchange="uploadProfilePicture(this)">
+            </div>
+            
+            <div class="profile-info">
+                <h1 class="profile-name">{{ current_user.username }}</h1>
+                <p class="profile-email">{{ current_user.email }}</p>
+                <div class="profile-badges">
+                    <span class="profile-badge {% if current_user.is_main_admin or current_user.is_admin %}admin{% endif %}">
+                        {% if current_user.is_main_admin %}
+                        <i class="fas fa-crown"></i> Main Administrator
+                        {% elif current_user.is_admin %}
+                        <i class="fas fa-shield-alt"></i> Administrator
+                        {% else %}
+                        <i class="fas fa-user"></i> User
+                        {% endif %}
+                    </span>
+                    <span class="profile-badge">
+                        <i class="fas fa-calendar"></i> Member since {{ current_user.created_at|relative_time }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Grid -->
+    <div class="profile-grid">
+        <!-- Account Info -->
+        <div class="info-card-premium">
+            <div class="info-card-header">
+                <i class="fas fa-info-circle"></i>
+                <h3>Account Information</h3>
+            </div>
+            
+            <div class="info-item">
+                <div class="info-label">
+                    <i class="fas fa-clock"></i>
+                    <span>Last Login</span>
+                </div>
+                <div class="info-value">
+                    <span>{{ current_user.last_login|relative_time if current_user.last_login else 'Never' }}</span>
+                </div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">
+                    <i class="fas fa-circle"></i>
+                    <span>Last Active</span>
+                </div>
+                <div class="info-value">
+                    <span>{{ current_user.last_active|relative_time if current_user.last_active else 'Never' }}</span>
+                </div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">
+                    <i class="fas fa-key"></i>
+                    <span>API Key</span>
+                </div>
+                <div class="info-value">
+                    <span id="apiKeyDisplay" class="api-key-display" data-full-key="{{ current_user.api_key or '' }}">
+                        {% if current_user.api_key %}{{ current_user.api_key[:8] }}{{ '•' * 16 }}{{ current_user.api_key[-4:] }}{% else %}No key generated{% endif %}
+                    </span>
+                    <button type="button" class="icon-btn" onclick="toggleAPIKeyVisibility()" title="Show/Hide API Key">
+                        <i class="fas fa-eye" id="apiKeyEyeIcon"></i>
+                    </button>
+                    <button type="button" class="icon-btn" onclick="copyAPIKey()" title="Copy API Key">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <button type="button" class="icon-btn" onclick="regenerateAPIKey()" title="Regenerate API Key">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+            </div>
+
+            {% if get_setting('discord_auth_enabled', '0') == '1' %}
+            <div class="info-item">
+                <div class="info-label">
+                    <i class="fab fa-discord" style="color: #5865F2;"></i>
+                    <span>Discord</span>
+                </div>
+                <div class="info-value">
+                    {% if current_user.discord_id %}
+                    <span style="font-size: 0.875rem; font-weight: 600;">{{ current_user.discord_username }}</span>
+                    <form method="POST" action="{{ url_for('discord_unlink') }}" style="display: inline;">
+                        <button type="submit" class="icon-btn" onclick="return confirm('Unlink Discord account?')" title="Unlink Discord">
+                            <i class="fas fa-unlink"></i>
+                        </button>
+                    </form>
+                    {% else %}
+                    <a href="{{ url_for('discord_link') }}" class="discord-btn">
+                        <i class="fab fa-discord"></i>
+                        <span>Link Discord</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Edit Profile -->
+        <div class="edit-form-card">
+            <div class="info-card-header">
+                <i class="fas fa-user-edit"></i>
+                <h3>Edit Profile</h3>
+            </div>
+
+            <form method="POST" action="{{ url_for('profile') }}">
+                <input type="hidden" name="form_section" value="account">
+                <div class="form-grid-premium">
+                    <div class="form-group-premium">
+                        <label class="form-label-premium">
+                            <i class="fas fa-user"></i>
+                            <span>Username</span>
+                        </label>
+                        <input type="text" name="username" class="form-input-premium" value="{{ current_user.username }}" required>
+                    </div>
+
+                    <div class="form-group-premium">
+                        <label class="form-label-premium">
+                            <i class="fas fa-envelope"></i>
+                            <span>Email Address</span>
+                        </label>
+                        <input type="email" name="email" class="form-input-premium" value="{{ current_user.email }}" required>
+                    </div>
+
+                    <div class="form-group-premium">
+                        <label class="form-label-premium">
+                            <i class="fas fa-lock"></i>
+                            <span>Current Password</span>
+                        </label>
+                        <input type="password" name="current_password" class="form-input-premium" placeholder="Enter current password">
+                    </div>
+
+                    <div class="form-group-premium">
+                        <label class="form-label-premium">
+                            <i class="fas fa-key"></i>
+                            <span>New Password</span>
+                        </label>
+                        <input type="password" name="new_password" class="form-input-premium" placeholder="Leave blank to keep current">
+                    </div>
+
+                    <div class="form-group-premium">
+                        <label class="form-label-premium">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Confirm New Password</span>
+                        </label>
+                        <input type="password" name="confirm_password" class="form-input-premium" placeholder="Confirm new password">
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-premium danger" onclick="deleteProfilePicture()">
+                        <i class="fas fa-trash"></i>
+                        <span>Remove Photo</span>
+                    </button>
+                    <button type="submit" class="btn-premium primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============ THEME CUSTOMIZATION ============ -->
+    {% set tc = current_user.theme_custom or {} %}
+    <div class="theme-card" id="theme">
+        <div class="info-card-header">
+            <i class="fas fa-palette"></i>
+            <h3>Appearance &amp; Theme</h3>
+            <span class="theme-card-sub">Customize colors, fonts and shape to make the panel yours.</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('profile') }}" id="themeForm">
+            <input type="hidden" name="form_section" value="theme">
+            <input type="hidden" name="preset" id="presetField" value="{{ tc.preset or '' }}">
+
+            <!-- Mode selector -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-adjust"></i> Theme Mode
+                    <span class="theme-section-hint">Preview switches instantly; click <em>Save Theme</em> to keep.</span>
+                </div>
+                <div class="theme-mode-grid">
+                    <label class="theme-mode-card">
+                        <input type="radio" name="theme" value="dark" {% if current_user.theme == 'dark' or current_user.theme == 'default' %}checked{% endif %}>
+                        <div class="theme-mode-inner">
+                            <div class="mode-mockup dark">
+                                <div class="mode-mockup-sidebar">
+                                    <div class="mock-active"></div>
+                                </div>
+                                <div class="mode-mockup-content"></div>
+                            </div>
+                            <div class="mode-label">
+                                <div class="mode-label-text">
+                                    <i class="fas fa-moon"></i>
+                                    <div>
+                                        Dark
+                                        <span class="mode-label-sub">Comfortable for night use</span>
+                                    </div>
+                                </div>
+                                <div class="mode-check"><i class="fas fa-check"></i></div>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="theme-mode-card">
+                        <input type="radio" name="theme" value="light" {% if current_user.theme == 'light' %}checked{% endif %}>
+                        <div class="theme-mode-inner">
+                            <div class="mode-mockup light">
+                                <div class="mode-mockup-sidebar">
+                                    <div class="mock-active"></div>
+                                </div>
+                                <div class="mode-mockup-content"></div>
+                            </div>
+                            <div class="mode-label">
+                                <div class="mode-label-text">
+                                    <i class="fas fa-sun"></i>
+                                    <div>
+                                        Light
+                                        <span class="mode-label-sub">Bright &amp; clean look</span>
+                                    </div>
+                                </div>
+                                <div class="mode-check"><i class="fas fa-check"></i></div>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="theme-mode-card">
+                        <input type="radio" name="theme" value="auto" {% if current_user.theme == 'auto' %}checked{% endif %}>
+                        <div class="theme-mode-inner">
+                            <div class="mode-mockup auto">
+                                <div class="mode-mockup-sidebar">
+                                    <div class="mock-active"></div>
+                                </div>
+                                <div class="mode-mockup-content"></div>
+                            </div>
+                            <div class="mode-label">
+                                <div class="mode-label-text">
+                                    <i class="fas fa-desktop"></i>
+                                    <div>
+                                        Auto
+                                        <span class="mode-label-sub">Follows your system</span>
+                                    </div>
+                                </div>
+                                <div class="mode-check"><i class="fas fa-check"></i></div>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Presets -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-magic"></i> Color Presets
+                    <span class="theme-section-hint">Click to apply, then save.</span>
+                </div>
+                <div class="preset-grid">
+                    <button type="button" class="preset-card" data-preset="default"
+                            data-accent="#3b82f6" data-success="#10b981" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#667eea" data-ge="#764ba2">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
+                        <span>Default</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="ocean"
+                            data-accent="#0ea5e9" data-success="#06b6d4" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#0ea5e9" data-ge="#06b6d4">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #0ea5e9, #06b6d4);"></div>
+                        <span>Ocean</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="sunset"
+                            data-accent="#f59e0b" data-success="#10b981" data-warning="#f97316" data-danger="#ef4444"
+                            data-gs="#fa709a" data-ge="#fee140">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #fa709a, #fee140);"></div>
+                        <span>Sunset</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="forest"
+                            data-accent="#22c55e" data-success="#16a34a" data-warning="#eab308" data-danger="#dc2626"
+                            data-gs="#11998e" data-ge="#38ef7d">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #11998e, #38ef7d);"></div>
+                        <span>Forest</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="midnight"
+                            data-accent="#8b5cf6" data-success="#10b981" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#2d3561" data-ge="#c05c7e">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #2d3561, #c05c7e);"></div>
+                        <span>Midnight</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="cherry"
+                            data-accent="#ec4899" data-success="#10b981" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#ee0979" data-ge="#ff6a00">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #ee0979, #ff6a00);"></div>
+                        <span>Cherry</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="emerald"
+                            data-accent="#059669" data-success="#10b981" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#134e5e" data-ge="#71b280">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #134e5e, #71b280);"></div>
+                        <span>Emerald</span>
+                    </button>
+                    <button type="button" class="preset-card" data-preset="grape"
+                            data-accent="#a855f7" data-success="#10b981" data-warning="#f59e0b" data-danger="#ef4444"
+                            data-gs="#6a11cb" data-ge="#2575fc">
+                        <div class="preset-swatch" style="background: linear-gradient(135deg, #6a11cb, #2575fc);"></div>
+                        <span>Grape</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Accent colors -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-tint"></i> Accent Colors
+                </div>
+                <div class="color-grid">
+                    <div class="color-field">
+                        <label>Primary</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="accent_primary" id="accent_primary"
+                                   value="{{ tc.accent_primary or '#3b82f6' }}">
+                            <span class="color-hex" id="accent_primary_hex">{{ tc.accent_primary or '#3b82f6' }}</span>
+                        </div>
+                    </div>
+                    <div class="color-field">
+                        <label>Success</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="accent_success" id="accent_success"
+                                   value="{{ tc.accent_success or '#10b981' }}">
+                            <span class="color-hex" id="accent_success_hex">{{ tc.accent_success or '#10b981' }}</span>
+                        </div>
+                    </div>
+                    <div class="color-field">
+                        <label>Warning</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="accent_warning" id="accent_warning"
+                                   value="{{ tc.accent_warning or '#f59e0b' }}">
+                            <span class="color-hex" id="accent_warning_hex">{{ tc.accent_warning or '#f59e0b' }}</span>
+                        </div>
+                    </div>
+                    <div class="color-field">
+                        <label>Danger</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="accent_danger" id="accent_danger"
+                                   value="{{ tc.accent_danger or '#ef4444' }}">
+                            <span class="color-hex" id="accent_danger_hex">{{ tc.accent_danger or '#ef4444' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gradient -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-rainbow"></i> Header Gradient
+                </div>
+                <div class="color-grid">
+                    <div class="color-field">
+                        <label>Gradient Start</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="gradient_start" id="gradient_start"
+                                   value="{{ tc.gradient_start or '#667eea' }}">
+                            <span class="color-hex" id="gradient_start_hex">{{ tc.gradient_start or '#667eea' }}</span>
+                        </div>
+                    </div>
+                    <div class="color-field">
+                        <label>Gradient End</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="gradient_end" id="gradient_end"
+                                   value="{{ tc.gradient_end or '#764ba2' }}">
+                            <span class="color-hex" id="gradient_end_hex">{{ tc.gradient_end or '#764ba2' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="gradient-preview" id="gradientPreview"></div>
+            </div>
+
+            <!-- Surfaces -->
+            {% set auto_surface = tc.get('auto_surface', True) if tc else True %}
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-layer-group"></i> Surfaces
+                    <label class="surface-auto-toggle" title="Automatically use the surface colors that match the selected theme mode">
+                        <input type="checkbox" name="auto_surface" id="auto_surface" value="1" {% if auto_surface %}checked{% endif %}>
+                        <span class="switch"></span>
+                        <span>Auto-match theme</span>
+                    </label>
+                </div>
+                <div class="color-grid" id="surfaceGrid">
+                    <div class="color-field" data-surface>
+                        <label>Page Background</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="bg_primary" id="bg_primary"
+                                   value="{{ tc.bg_primary or '#0a0c10' }}">
+                            <span class="color-hex" id="bg_primary_hex">{{ tc.bg_primary or '#0a0c10' }}</span>
+                        </div>
+                    </div>
+                    <div class="color-field" data-surface>
+                        <label>Card Background</label>
+                        <div class="color-input-wrap">
+                            <input type="color" name="card_bg" id="card_bg"
+                                   value="{{ tc.card_bg or '#111316' }}">
+                            <span class="color-hex" id="card_bg_hex">{{ tc.card_bg or '#111316' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sliders -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-sliders-h"></i> Shape &amp; Size
+                </div>
+                <div class="slider-grid">
+                    <div class="slider-field">
+                        <label>
+                            Corner Radius
+                            <span class="slider-value" id="border_radius_val">{{ tc.border_radius if tc.border_radius is not none else 12 }}px</span>
+                        </label>
+                        <input type="range" name="border_radius" id="border_radius"
+                               min="0" max="32" step="1"
+                               value="{{ tc.border_radius if tc.border_radius is not none else 12 }}">
+                    </div>
+                    <div class="slider-field">
+                        <label>
+                            Font Size
+                            <span class="slider-value" id="font_scale_val">{{ tc.font_scale if tc.font_scale else 100 }}%</span>
+                        </label>
+                        <input type="range" name="font_scale" id="font_scale"
+                               min="80" max="130" step="5"
+                               value="{{ tc.font_scale if tc.font_scale else 100 }}">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live preview -->
+            <div class="theme-section">
+                <div class="theme-section-title">
+                    <i class="fas fa-eye"></i> Live Preview
+                </div>
+                <div class="theme-preview-box" id="themePreview">
+                    <div class="preview-header" id="previewHeader">
+                        <span class="preview-title">Sample Card</span>
+                        <span class="preview-badge" id="previewBadge">Active</span>
+                    </div>
+                    <p class="preview-text">Live preview of your color choices.</p>
+                    <div class="preview-buttons">
+                        <button type="button" class="preview-btn primary" id="previewBtnPrimary">Primary</button>
+                        <button type="button" class="preview-btn success" id="previewBtnSuccess">Success</button>
+                        <button type="button" class="preview-btn warning" id="previewBtnWarning">Warning</button>
+                        <button type="button" class="preview-btn danger" id="previewBtnDanger">Danger</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn-premium danger" onclick="resetTheme()">
+                    <i class="fas fa-undo"></i>
+                    <span>Reset to Defaults</span>
+                </button>
+                <button type="submit" class="btn-premium primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Theme</span>
+                </button>
+            </div>
+        </form>
+    </div>
+    <!-- ============ /THEME CUSTOMIZATION ============ -->
+
+    <!-- Recent Activity -->
+    <div class="activity-card">
+        <div class="activity-header">
+            <div class="activity-title">
+                <i class="fas fa-history"></i>
+                <span>Recent Activity</span>
+            </div>
+        </div>
+
+        {% if activities %}
+        <table class="activity-table">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>Details</th>
+                    <th>IP Address</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for activity in activities[:10] %}
+                <tr>
+                    <td data-label="Action">
+                        <span class="action-badge">{{ activity.action }}</span>
+                    </td>
+                    <td data-label="Resource">
+                        <span>{{ activity.resource_type or '-' }} {{ activity.resource_id or '' }}</span>
+                    </td>
+                    <td data-label="Details">
+                        <span style="font-size: 0.875rem; color: var(--text-muted);">{{ activity.details|truncate(50) }}</span>
+                    </td>
+                    <td data-label="IP Address">
+                        <span style="font-family: 'Courier New', monospace; font-size: 0.875rem;">{{ activity.ip_address or '-' }}</span>
+                    </td>
+                    <td data-label="Time">
+                        <span style="font-size: 0.875rem; color: var(--text-muted);">{{ activity.created_at|relative_time }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state-premium">
+            <div class="empty-icon-premium">
+                <i class="fas fa-history"></i>
+            </div>
+            <p style="color: var(--text-muted);">No activity recorded yet</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Upload profile picture
+    function uploadProfilePicture(input) {
+        if (!input.files || !input.files[0]) return;
+
+        const file = input.files[0];
+        
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('File size must be less than 5MB', 'warning');
+            return;
+        }
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            showToast('Please select an image file', 'warning');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('picture', file);
+
+        showLoading();
+
+        fetch('/profile/picture', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Profile picture updated successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.error || 'Failed to upload picture', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Upload error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        })
+        .finally(() => {
+            hideLoading();
+        });
+    }
+
+    // Delete profile picture
+    function deleteProfilePicture() {
+        if (!confirm('Are you sure you want to remove your profile picture?')) {
+            return;
+        }
+
+        showLoading();
+
+        fetch('/profile/picture/delete', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Profile picture removed successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.error || 'Failed to remove picture', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Delete error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        })
+        .finally(() => {
+            hideLoading();
+        });
+    }
+
+    // Toggle API key visibility
+    function toggleAPIKeyVisibility() {
+        const display = document.getElementById('apiKeyDisplay');
+        const icon = document.getElementById('apiKeyEyeIcon');
+        if (!display) return;
+
+        const fullKey = display.getAttribute('data-full-key') || '';
+        if (!fullKey) {
+            showToast('No API key available', 'warning');
+            return;
+        }
+
+        const isMasked = !display.dataset.revealed || display.dataset.revealed === 'false';
+        if (isMasked) {
+            display.textContent = fullKey;
+            display.dataset.revealed = 'true';
+            if (icon) { icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash'); }
+        } else {
+            const masked = fullKey.length > 12
+                ? fullKey.slice(0, 8) + '•'.repeat(16) + fullKey.slice(-4)
+                : fullKey;
+            display.textContent = masked;
+            display.dataset.revealed = 'false';
+            if (icon) { icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye'); }
+        }
+    }
+
+    // Copy API key
+    function copyAPIKey() {
+        const display = document.getElementById('apiKeyDisplay');
+        const key = (display && display.getAttribute('data-full-key')) || '{{ current_user.api_key or "" }}';
+        if (!key) {
+            showToast('No API key available', 'warning');
+            return;
+        }
+        navigator.clipboard.writeText(key).then(() => {
+            showToast('API key copied to clipboard', 'success');
+        }).catch(() => {
+            showToast('Failed to copy to clipboard', 'danger');
+        });
+    }
+
+    // Regenerate API key
+    function regenerateAPIKey() {
+        if (!confirm('Are you sure you want to regenerate your API key? The old key will stop working immediately.')) {
+            return;
+        }
+
+        showLoading();
+
+        fetch('/profile/api-key/regenerate', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('API key regenerated successfully', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showToast(data.error || 'Failed to regenerate API key', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Regenerate error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        })
+        .finally(() => {
+            hideLoading();
+        });
+    }
+
+    /* ===================== THEME CUSTOMIZATION ===================== */
+    (function() {
+        const COLOR_FIELDS = [
+            'accent_primary', 'accent_success', 'accent_warning', 'accent_danger',
+            'gradient_start', 'gradient_end', 'bg_primary', 'card_bg'
+        ];
+
+        // Default surface colors per theme mode. When "Auto-match theme" is on,
+        // the Surface color pickers track these as the theme mode changes.
+        const SURFACE_DEFAULTS = {
+            dark:  { bg_primary: '#0a0c10', card_bg: '#111316' },
+            light: { bg_primary: '#f5f7fa', card_bg: '#ffffff' },
+        };
+
+        function currentEffectiveTheme() {
+            const sel = document.querySelector('input[name="theme"]:checked');
+            const v = sel ? sel.value : 'dark';
+            if (v === 'auto') {
+                return (window.matchMedia &&
+                        window.matchMedia('(prefers-color-scheme: light)').matches)
+                    ? 'light' : 'dark';
+            }
+            return v;
+        }
+
+        function setColorInput(id, value) {
+            const input = document.getElementById(id);
+            const hex = document.getElementById(id + '_hex');
+            if (input) input.value = value;
+            if (hex) hex.textContent = value.toUpperCase();
+        }
+
+        function applySurfaceAutoMatch() {
+            const auto = document.getElementById('auto_surface');
+            const grid = document.getElementById('surfaceGrid');
+            if (!auto || !grid) return;
+
+            const isAuto = auto.checked;
+            grid.querySelectorAll('[data-surface]').forEach(el => {
+                el.classList.toggle('is-auto', isAuto);
+            });
+
+            if (isAuto) {
+                const defs = SURFACE_DEFAULTS[currentEffectiveTheme()] || SURFACE_DEFAULTS.dark;
+                setColorInput('bg_primary', defs.bg_primary);
+                setColorInput('card_bg', defs.card_bg);
+                // When auto, let the CSS variables fall back to the theme's
+                // own defaults — clear any inline overrides on root.
+                document.documentElement.style.removeProperty('--bg-primary');
+                document.documentElement.style.removeProperty('--card-bg');
+                document.documentElement.style.removeProperty('--bg-secondary');
+            }
+            applyLivePreview();
+        }
+
+        // Sync hex label + apply live preview when a color picker changes.
+        COLOR_FIELDS.forEach(id => {
+            const input = document.getElementById(id);
+            const hex = document.getElementById(id + '_hex');
+            if (!input) return;
+            input.addEventListener('input', () => {
+                if (hex) hex.textContent = input.value.toUpperCase();
+                applyLivePreview();
+            });
+        });
+
+        // Sliders
+        const br = document.getElementById('border_radius');
+        const brVal = document.getElementById('border_radius_val');
+        if (br) {
+            br.addEventListener('input', () => {
+                brVal.textContent = br.value + 'px';
+                applyLivePreview();
+            });
+        }
+
+        const fs = document.getElementById('font_scale');
+        const fsVal = document.getElementById('font_scale_val');
+        if (fs) {
+            fs.addEventListener('input', () => {
+                fsVal.textContent = fs.value + '%';
+                applyLivePreview();
+            });
+        }
+
+        // Theme mode radio buttons -> instant data-theme switch for preview,
+        // and refresh surface auto-match if it's enabled.
+        document.querySelectorAll('input[name="theme"]').forEach(r => {
+            r.addEventListener('change', () => {
+                const v = r.value;
+                const root = document.documentElement;
+                if (v === 'auto') {
+                    const prefersLight = window.matchMedia &&
+                        window.matchMedia('(prefers-color-scheme: light)').matches;
+                    root.setAttribute('data-theme', prefersLight ? 'light' : 'dark');
+                    root.setAttribute('data-theme-mode', 'auto');
+                } else {
+                    root.removeAttribute('data-theme-mode');
+                    root.setAttribute('data-theme', v);
+                }
+                applySurfaceAutoMatch();
+            });
+        });
+
+        // Auto-surface toggle changes
+        const autoCheckbox = document.getElementById('auto_surface');
+        if (autoCheckbox) {
+            autoCheckbox.addEventListener('change', applySurfaceAutoMatch);
+        }
+
+        // Watch system color-scheme so 'auto' mode keeps surface in sync.
+        if (window.matchMedia) {
+            try {
+                window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+                    const sel = document.querySelector('input[name="theme"]:checked');
+                    if (sel && sel.value === 'auto') applySurfaceAutoMatch();
+                });
+            } catch (_) {}
+        }
+
+        // Presets
+        document.querySelectorAll('.preset-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                document.getElementById('presetField').value = card.dataset.preset || '';
+
+                const map = {
+                    accent_primary: card.dataset.accent,
+                    accent_success: card.dataset.success,
+                    accent_warning: card.dataset.warning,
+                    accent_danger:  card.dataset.danger,
+                    gradient_start: card.dataset.gs,
+                    gradient_end:   card.dataset.ge,
+                };
+                Object.entries(map).forEach(([id, val]) => {
+                    if (val) setColorInput(id, val);
+                });
+                applyLivePreview();
+            });
+        });
+
+        // Mark current preset (if any) as active on load
+        const currentPreset = document.getElementById('presetField').value;
+        if (currentPreset) {
+            const cur = document.querySelector('.preset-card[data-preset="' + currentPreset + '"]');
+            if (cur) cur.classList.add('active');
+        }
+
+        function applyLivePreview() {
+            const get = id => (document.getElementById(id) || {}).value;
+            const root = document.documentElement;
+            const autoSurface = (document.getElementById('auto_surface') || {}).checked;
+
+            const accent = get('accent_primary');
+            const success = get('accent_success');
+            const warning = get('accent_warning');
+            const danger = get('accent_danger');
+            const gs = get('gradient_start');
+            const ge = get('gradient_end');
+            const bg = get('bg_primary');
+            const cb = get('card_bg');
+            const radius = get('border_radius');
+            const fontScale = get('font_scale');
+
+            if (accent) {
+                root.style.setProperty('--accent-primary', accent);
+                root.style.setProperty('--input-focus', accent);
+            }
+            if (success) root.style.setProperty('--accent-success', success);
+            if (warning) root.style.setProperty('--accent-warning', warning);
+            if (danger)  root.style.setProperty('--accent-danger', danger);
+            if (gs && ge) {
+                root.style.setProperty('--gradient-start', gs);
+                root.style.setProperty('--gradient-end', ge);
+                root.style.setProperty('--gradient-primary',
+                    'linear-gradient(135deg, ' + gs + ' 0%, ' + ge + ' 100%)');
+            }
+            // Only push surface overrides when auto-match is OFF — otherwise we
+            // let the theme's own CSS variables drive the surfaces.
+            if (!autoSurface) {
+                if (bg) root.style.setProperty('--bg-primary', bg);
+                if (cb) {
+                    root.style.setProperty('--card-bg', cb);
+                    root.style.setProperty('--bg-secondary', cb);
+                }
+            }
+            if (radius) {
+                root.style.setProperty('--border-radius', radius + 'px');
+                root.style.setProperty('--border-radius-sm',
+                    Math.max(2, parseInt(radius, 10) - 4) + 'px');
+                root.style.setProperty('--border-radius-lg',
+                    (parseInt(radius, 10) + 4) + 'px');
+            }
+            if (fontScale) {
+                root.style.setProperty('--font-scale', (parseInt(fontScale, 10) / 100));
+                document.documentElement.style.fontSize =
+                    'calc(16px * ' + (parseInt(fontScale, 10) / 100) + ')';
+            }
+        }
+
+        // Initial state — apply auto-match (also runs applyLivePreview).
+        applySurfaceAutoMatch();
+
+        window.resetTheme = function resetTheme() {
+            if (!confirm('Reset theme back to the panel defaults? This clears all your custom colors and sizes.')) {
+                return;
+            }
+            // Submit form with a reset flag — backend wipes preferences.theme_custom.
+            const form = document.getElementById('themeForm');
+            const flag = document.createElement('input');
+            flag.type = 'hidden';
+            flag.name = 'reset_theme';
+            flag.value = '1';
+            form.appendChild(flag);
+            form.submit();
+        };
+    })();
+</script>
+{% endblock %}

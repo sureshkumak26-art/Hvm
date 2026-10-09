@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+
+{% block title %}API Management - {{ panel_name }}{% endblock %}
+
+{% block header_title %}API Management{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_dashboard') }}" class="breadcrumb-item">Admin</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">API Management</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* Modal Styles */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+    
+    .modal.active {
+        display: flex;
+    }
+    
+    .modal-content {
+        background: var(--card-bg);
+        border-radius: 0.75rem;
+        max-width: 500px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        animation: modalSlideIn 0.3s ease;
+    }
+    
+    @keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+    }
+    
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    .close-btn:hover {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+    
+    .modal-content form {
+        padding: 1.5rem;
+    }
+    
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+    
+    .stat-icon.primary {
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+    }
+    
+    .stat-icon.success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+    }
+    
+    .stat-icon.warning {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+    
+    .stat-content {
+        flex: 1;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+</style>
+
+<!-- Header Actions -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <h2 style="font-size: 1.25rem; margin: 0;">API Keys</h2>
+    <button class="btn btn-primary" onclick="showCreateModal()">
+        <i class="fas fa-plus"></i> Create API Key
+    </button>
+</div>
+
+<!-- Quick Stats -->
+<div class="grid grid-3" style="margin-bottom: 1.5rem;">
+    <div class="stat-card">
+        <div class="stat-icon primary">
+            <i class="fas fa-key"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total API Keys</div>
+            <div class="stat-value">{{ api_keys|length }}</div>
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-icon success">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Active Keys</div>
+            <div class="stat-value">{{ api_keys|selectattr('is_active', 'equalto', 1)|list|length }}</div>
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-icon warning">
+            <i class="fas fa-clock"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Keys Used</div>
+            <div class="stat-value">{{ api_keys|selectattr('last_used_at')|list|length }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- API Keys Table -->
+<div class="card">
+    {% if api_keys %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>User</th>
+                    <th>Key</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Last Used</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in api_keys %}
+                <tr>
+                    <td><strong>{{ key.name }}</strong></td>
+                    <td>{{ key.username }}</td>
+                    <td>
+                        <code style="background: var(--bg-secondary); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem;">
+                            {{ key.key[:20] }}...
+                        </code>
+                        <button class="btn btn-sm btn-outline" onclick="copyKey('{{ key.key }}')" title="Copy" style="margin-left: 0.5rem;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </td>
+                    <td>
+                        {% if key.is_active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ key.created_at|relative_time }}</td>
+                    <td>{{ key.last_used_at|relative_time if key.last_used_at else 'Never' }}</td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            {% if key.is_active %}
+                            <button class="btn btn-sm btn-warning" onclick="toggleKey({{ key.id }}, 0)" title="Deactivate">
+                                <i class="fas fa-ban"></i>
+                            </button>
+                            {% else %}
+                            <button class="btn btn-sm btn-success" onclick="toggleKey({{ key.id }}, 1)" title="Activate">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteKey({{ key.id }})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+        <i class="fas fa-key" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+        <h3>No API Keys</h3>
+        <p>Create your first API key to get started with the API</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- API Documentation -->
+<div class="card" style="margin-top: 1.5rem;">
+    <h3 style="margin-bottom: 1rem;"><i class="fas fa-book"></i> API Documentation</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+        Access the complete API documentation to learn how to use the HVM Panel API.
+    </p>
+    <a href="/api/v1/docs" target="_blank" class="btn btn-primary">
+        <i class="fas fa-external-link-alt"></i> View API Documentation
+    </a>
+</div>
+
+<!-- Create API Key Modal -->
+<div id="createModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Create API Key</h3>
+            <button class="close-btn" onclick="closeCreateModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <form id="createForm" onsubmit="createKey(event)">
+            <div class="form-group">
+                <label>Key Name</label>
+                <input type="text" class="form-control" name="name" placeholder="e.g., Production API Key" required>
+            </div>
+            
+            <div class="form-group">
+                <label>User</label>
+                <select class="form-control" name="user_id" required>
+                    <option value="">Select User</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> The API key will be generated automatically and shown once. Make sure to copy it!
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <i class="fas fa-plus"></i> Create API Key
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function showCreateModal() {
+        document.getElementById('createModal').classList.add('active');
+    }
+    
+    function closeCreateModal() {
+        document.getElementById('createModal').classList.remove('active');
+        document.getElementById('createForm').reset();
+    }
+    
+    async function createKey(event) {
+        event.preventDefault();
+        
+        const submitBtn = event.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+        
+        try {
+            const formData = new FormData(event.target);
+            const data = {
+                name: formData.get('name'),
+                user_id: parseInt(formData.get('user_id'))
+            };
+            
+            const response = await fetch('/admin/api/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Show API key in a better modal
+                const keyDisplay = `
+                    <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+                        <strong>Your API Key:</strong><br>
+                        <code style="word-break: break-all; font-size: 0.9rem;">${result.api_key}</code>
+                    </div>
+                    <div style="color: var(--accent-warning); margin-top: 1rem;">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        <strong>Important:</strong> Copy this key now! You won't be able to see it again.
+                    </div>
+                `;
+                
+                // Create custom modal for showing the key
+                const keyModal = document.createElement('div');
+                keyModal.className = 'modal active';
+                keyModal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>API Key Created Successfully</h3>
+                        </div>
+                        <div style="padding: 1.5rem;">
+                            ${keyDisplay}
+                            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                                <button class="btn btn-primary" onclick="copyToClipboard('${result.api_key}'); this.innerHTML='<i class=\\'fas fa-check\\'></i> Copied!'; this.disabled=true;" style="flex: 1;">
+                                    <i class="fas fa-copy"></i> Copy Key
+                                </button>
+                                <button class="btn btn-outline" onclick="this.closest('.modal').remove(); window.location.reload();" style="flex: 1;">
+                                    <i class="fas fa-check"></i> Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(keyModal);
+                closeCreateModal();
+            } else {
+                showToast(result.error || 'Failed to create API key', 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    }
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Copied to clipboard', 'success');
+        }).catch(() => {
+            // Fallback for older browsers
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('Copied to clipboard', 'success');
+        });
+    }
+    
+    function copyKey(key) {
+        copyToClipboard(key);
+    }
+    
+    async function toggleKey(keyId, active) {
+        const action = active ? 'activate' : 'deactivate';
+        
+        if (!confirm(`Are you sure you want to ${action} this API key?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/api/${keyId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ is_active: active })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(`API key ${action}d successfully`, 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(result.error || `Failed to ${action} API key`, 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        }
+    }
+    
+    async function deleteKey(keyId) {
+        if (!confirm('Are you sure you want to delete this API key? This action cannot be undone and the key will stop working immediately.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/admin/api/${keyId}/delete`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast('API key deleted successfully', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast(result.error || 'Failed to delete API key', 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('Network error: ' + error.message, 'danger');
+        }
+    }
+    
+    // Close modal when clicking outside
+    document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('createModal');
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeCreateModal();
+                }
+            });
+        }
+    });
+    
+    function showToast(message, type = 'info') {
+        // Check if showToast exists globally (from base.html)
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+            return;
+        }
+        
+        // Fallback toast implementation
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type}`;
+        toast.textContent = message;
+        toast.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000; min-width: 250px; animation: slideInRight 0.3s ease;';
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOutRight 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+</script>
+{% endblock %}

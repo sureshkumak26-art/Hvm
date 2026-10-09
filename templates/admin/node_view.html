@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node.name }} &middot; Node Details &middot; {{ panel_name }}{% endblock %}
+
+{% block content %}
+<style>
+    /* Scoped to this page so we don't leak into other admin pages */
+    .nv-wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .nv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.25rem;
+    }
+    .nv-header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        line-height: 1.2;
+        word-break: break-word;
+    }
+    .nv-header-sub {
+        margin: 0.25rem 0 0 0;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+    .nv-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .nv-status-banner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        padding: 1rem;
+    }
+    .nv-status-banner .stat-icon {
+        width: 56px;
+        height: 56px;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+    .nv-status-meta {
+        flex: 1;
+        min-width: 200px;
+    }
+    .nv-status-meta h2 {
+        margin: 0;
+        font-size: 1.25rem;
+        text-transform: capitalize;
+    }
+    .nv-status-uptime {
+        text-align: right;
+        white-space: nowrap;
+    }
+    .nv-info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.55rem 0.75rem;
+        background: var(--bg-tertiary);
+        border-radius: var(--border-radius-sm);
+        font-size: 0.88rem;
+    }
+    .nv-info-row + .nv-info-row {
+        margin-top: 0.5rem;
+    }
+    .nv-info-row .label { color: var(--text-muted); flex-shrink: 0; }
+    .nv-info-row .value {
+        font-weight: 600;
+        text-align: right;
+        word-break: break-all;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .nv-pre {
+        background: var(--bg-tertiary);
+        padding: 0.75rem;
+        border-radius: var(--border-radius-sm);
+        font-size: 0.78rem;
+        line-height: 1.5;
+        overflow-x: auto;
+        overflow-y: auto;
+        white-space: pre;
+        margin: 0;
+        max-width: 100%;
+        width: 100%;
+        max-height: 280px;
+        box-sizing: border-box;
+        /* Force flex/grid containers to let us scroll instead of growing */
+        min-width: 0;
+    }
+    /* Grid children default to `min-width: auto` which prevents them
+       from shrinking below their content's intrinsic width. Wide
+       <pre> tables (lxc storage list output etc.) then push their
+       parent grid cell beyond the page edge. `min-width: 0` lets the
+       cell shrink and trigger the <pre>'s own overflow-x: auto. */
+    .grid > .card {
+        min-width: 0;
+    }
+    .nv-pre-block {
+        margin-top: 0.85rem;
+    }
+    .nv-pre-block-label {
+        margin: 0 0 0.4rem 0;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+    .nv-chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+    .nv-empty {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: var(--text-muted);
+    }
+    .nv-empty i { font-size: 2.4rem; opacity: 0.45; margin-bottom: 0.75rem; }
+    .nv-table-wrap {
+        overflow-x: auto;
+        margin: 0 -0.25rem;
+        padding: 0 0.25rem;
+    }
+    .nv-table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+    .nv-table th, .nv-table td {
+        padding: 0.6rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+        vertical-align: middle;
+    }
+    .nv-table th {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 600;
+        background: var(--bg-tertiary);
+    }
+    .nv-table tr:last-child td { border-bottom: none; }
+    .nv-table tr:hover td { background: var(--bg-tertiary); }
+    .nv-table code {
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 0.78rem;
+        background: var(--bg-inset);
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        color: var(--accent-primary);
+    }
+    .nv-progress {
+        width: 100%;
+        height: 6px;
+        background: var(--bg-inset);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 0.4rem;
+    }
+    .nv-progress > span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.3s ease;
+    }
+    .nv-progress > span.success { background: var(--accent-success); }
+    .nv-progress > span.warning { background: var(--accent-warning); }
+    .nv-progress > span.danger  { background: var(--accent-danger); }
+
+    @media (max-width: 768px) {
+        .nv-status-uptime { text-align: left; width: 100%; }
+        .nv-status-banner .stat-icon { width: 48px; height: 48px; font-size: 1.2rem; }
+        .nv-header { flex-direction: column; }
+        .nv-actions { width: 100%; }
+        .nv-actions .btn { flex: 1; }
+    }
+</style>
+
+<div class="nv-wrap">
+
+    {# ---------- Header ---------- #}
+    <div class="nv-header">
+        <div style="min-width: 0;">
+            <h1>{{ node.name }}</h1>
+            <p class="nv-header-sub">
+                <i class="fas fa-server"></i> Node details
+                {% if node.is_local %}
+                &middot; <span style="color: var(--accent-success);">Local</span>
+                {% else %}
+                &middot; <span style="color: var(--accent-info);">Remote</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="nv-actions">
+            <a href="{{ url_for('admin_nodes') }}" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> <span class="btn-text-hide-xs">Back</span>
+            </a>
+            {% if current_user.is_main_admin %}
+            <a href="{{ url_for('admin_node_console', node_id=node.id) }}" class="btn btn-danger"
+               title="Direct root shell on the node host (main admin only)">
+                <i class="fas fa-terminal"></i> <span class="btn-text-hide-xs">Node Console</span>
+            </a>
+            {% endif %}
+            <a href="{{ url_for('admin_node_edit', node_id=node.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> <span class="btn-text-hide-xs">Edit</span>
+            </a>
+        </div>
+    </div>
+
+    {# ---------- Status Banner ---------- #}
+    <div class="card nv-status-banner" style="margin-bottom: 1.25rem; {% if status.online %}border-left: 4px solid var(--accent-success);{% else %}border-left: 4px solid var(--accent-danger);{% endif %}">
+        <div class="stat-icon {% if status.online %}success{% else %}danger{% endif %}">
+            <i class="fas fa-{% if status.online %}check-circle{% else %}exclamation-circle{% endif %}"></i>
+        </div>
+        <div class="nv-status-meta">
+            <h2>{{ status.status|default('Unknown') }}</h2>
+            <div style="margin-top: 0.35rem; display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                {% if node.is_local %}
+                <span class="badge badge-success"><i class="fas fa-home"></i> Local Node</span>
+                {% else %}
+                <span class="badge badge-info"><i class="fas fa-cloud"></i> Remote Node</span>
+                {% endif %}
+                {% if status.online %}
+                <span class="badge badge-success"><i class="fas fa-circle"></i> Online</span>
+                {% else %}
+                <span class="badge badge-danger"><i class="fas fa-circle"></i> Offline</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if status.online %}
+        <div class="nv-status-uptime">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Uptime</div>
+            <div style="font-size: 1.1rem; font-weight: 600; margin-top: 0.15rem;">{{ stats.uptime|default('Unknown') }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# ---------- Resource Stat Cards ---------- #}
+    {% set _cpu = (stats.cpu if stats and stats.cpu is defined else 0)|float %}
+    {% set _ram_pct = ((stats.ram.percent if stats and stats.ram and stats.ram.percent is defined else 0)|float) %}
+    {% set _disk_pct_str = (stats.disk.percent|string if stats and stats.disk and stats.disk.percent is defined else '0%') %}
+    {# Parse numeric disk percent from a string like "57%" for the progress bar #}
+    {% set _disk_pct = _disk_pct_str.replace('%','')|float if '%' in _disk_pct_str else _disk_pct_str|float %}
+
+    <div class="grid grid-4" style="margin-bottom: 1.25rem;">
+
+        <div class="stat-card">
+            <div class="stat-icon primary"><i class="fas fa-microchip"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">CPU Usage</div>
+                <div class="stat-value">{{ _cpu|round(1) }}%</div>
+                <div class="nv-progress">
+                    <span class="{% if _cpu > 80 %}danger{% elif _cpu > 60 %}warning{% else %}success{% endif %}"
+                          style="width: {{ [_cpu, 100]|min }}%;"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon success"><i class="fas fa-memory"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">RAM Usage</div>
+                <div class="stat-value">{{ _ram_pct|round(1) }}%</div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    {{ stats.ram.used|default(0) if stats and stats.ram else 0 }} MB / {{ stats.ram.total|default(0) if stats and stats.ram else 0 }} MB
+                </div>
+                <div class="nv-progress">
+                    <span class="{% if _ram_pct > 80 %}danger{% elif _ram_pct > 60 %}warning{% else %}success{% endif %}"
+                          style="width: {{ [_ram_pct, 100]|min }}%;"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon warning"><i class="fas fa-hdd"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">Disk Usage</div>
+                <div class="stat-value">{{ _disk_pct_str }}</div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    {{ stats.disk.used|default('Unknown') if stats and stats.disk else 'Unknown' }} / {{ stats.disk.total|default('Unknown') if stats and stats.disk else 'Unknown' }}
+                </div>
+                <div class="nv-progress">
+                    <span class="{% if _disk_pct > 80 %}danger{% elif _disk_pct > 60 %}warning{% else %}success{% endif %}"
+                          style="width: {{ [_disk_pct, 100]|min }}%;"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon info"><i class="fas fa-cubes"></i></div>
+            <div class="stat-content">
+                <div class="stat-label">VPS Count</div>
+                <div class="stat-value">{{ vps_count|default(0) }}</div>
+                {% set _cap = node.total_vps|default(0)|int %}
+                {% set _cap_pct = (vps_count / _cap * 100) if _cap > 0 else 0 %}
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">
+                    {{ vps_count|default(0) }} / {{ _cap if _cap > 0 else '∞' }} {% if _cap > 0 %}used{% else %}no limit{% endif %}
+                </div>
+                {% if _cap > 0 %}
+                <div class="nv-progress">
+                    <span class="{% if _cap_pct >= 100 %}danger{% elif _cap_pct >= 80 %}warning{% else %}success{% endif %}"
+                          style="width: {{ [_cap_pct, 100]|min }}%;"></span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    {# ---------- System Info + Network ---------- #}
+    <div class="grid grid-2" style="margin-bottom: 1.25rem;">
+
+        <div class="card">
+            <h3 style="margin: 0 0 0.85rem 0; font-size: 1rem;">
+                <i class="fas fa-info-circle" style="color: var(--accent-primary);"></i> System information
+            </h3>
+
+            {% if system_info.kernel %}
+            <div class="nv-info-row"><span class="label">Kernel</span><span class="value">{{ system_info.kernel }}</span></div>
+            {% endif %}
+
+            {% if system_info.python_version %}
+            <div class="nv-info-row"><span class="label">Python version</span><span class="value">{{ system_info.python_version }}</span></div>
+            {% endif %}
+
+            {% if system_info.version %}
+            <div class="nv-info-row"><span class="label">Node agent</span><span class="value">{{ system_info.version }}</span></div>
+            {% endif %}
+
+            <div class="nv-info-row"><span class="label">Location</span><span class="value">{{ node.location|default('Unspecified') }}</span></div>
+
+            {% if not node.is_local %}
+            <div class="nv-info-row"><span class="label">URL</span><span class="value" style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;">{{ node.url }}</span></div>
+            {% endif %}
+
+            {% if system_info.os_details and system_info.os_details != 'N/A' %}
+            <div class="nv-pre-block">
+                <div class="nv-pre-block-label">OS Details</div>
+                <pre class="nv-pre">{{ system_info.os_details }}</pre>
+            </div>
+            {% endif %}
+
+            {% if system_info.cpu_details and system_info.cpu_details != 'N/A' %}
+            <div class="nv-pre-block">
+                <div class="nv-pre-block-label">CPU Details</div>
+                <pre class="nv-pre">{{ system_info.cpu_details }}</pre>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <h3 style="margin: 0 0 0.85rem 0; font-size: 1rem;">
+                <i class="fas fa-network-wired" style="color: var(--accent-success);"></i> Network configuration
+            </h3>
+
+            <div style="margin-bottom: 1rem;">
+                <div class="nv-pre-block-label" style="margin-bottom: 0.5rem;">IP Addresses</div>
+                <div class="nv-chip-list">
+                    {% if node.ip_addresses %}
+                        {% for ip in node.ip_addresses %}
+                        <span class="badge badge-info">{{ ip }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">No IP addresses configured</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if node.ip_aliases %}
+            <div style="margin-bottom: 1rem;">
+                <div class="nv-pre-block-label" style="margin-bottom: 0.5rem;">IP Aliases</div>
+                <div class="nv-chip-list">
+                    {% for alias in node.ip_aliases %}
+                    <span class="badge badge-success">{{ alias }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="nv-info-row">
+                <span class="label">Storage pools</span>
+                <span class="value">
+                    {% if pools and pools.strip() %}
+                    <span class="badge badge-info">configured</span>
+                    {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.82rem;">none / unavailable</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="nv-info-row">
+                <span class="label">LXD networks</span>
+                <span class="value">
+                    {% if networks and networks.strip() %}
+                    <span class="badge badge-info">configured</span>
+                    {% else %}
+                    <span style="color: var(--text-muted); font-size: 0.82rem;">none / unavailable</span>
+                    {% endif %}
+                </span>
+            </div>
+            <p style="margin: 0.75rem 0 0 0; font-size: 0.78rem; color: var(--text-muted);">
+                Full pool / network output is shown in the dedicated cards below.
+            </p>
+        </div>
+
+    </div>
+
+    {# ---------- Storage Pools (full-width, scrollable) ---------- #}
+    {% if pools and pools.strip() %}
+    <div class="card" style="margin-bottom: 1.25rem; min-width: 0;">
+        <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem;">
+            <i class="fas fa-database" style="color: var(--accent-info);"></i> Storage pools
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-left: 0.4rem;">
+                <code style="font-size: 0.72rem;">lxc storage list</code>
+            </span>
+        </h3>
+        <pre class="nv-pre">{{ pools }}</pre>
+    </div>
+    {% endif %}
+
+    {# ---------- LXD Networks (full-width, scrollable) ---------- #}
+    {% if networks and networks.strip() %}
+    <div class="card" style="margin-bottom: 1.25rem; min-width: 0;">
+        <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem;">
+            <i class="fas fa-project-diagram" style="color: var(--accent-warning);"></i> LXD networks
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-left: 0.4rem;">
+                <code style="font-size: 0.72rem;">lxc network list</code>
+            </span>
+        </h3>
+        <pre class="nv-pre">{{ networks }}</pre>
+    </div>
+    {% endif %}
+
+    {# ---------- Optional: full memory / disk details ---------- #}
+    {% if system_info.memory_details and system_info.memory_details != 'N/A' %}
+    <div class="card" style="margin-bottom: 1.25rem;">
+        <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem;">
+            <i class="fas fa-memory" style="color: var(--accent-success);"></i> Memory details
+        </h3>
+        <pre class="nv-pre" style="max-height: 180px;">{{ system_info.memory_details }}</pre>
+    </div>
+    {% endif %}
+
+    {% if system_info.disk_details and system_info.disk_details != 'N/A' %}
+    <div class="card" style="margin-bottom: 1.25rem;">
+        <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem;">
+            <i class="fas fa-hdd" style="color: var(--accent-warning);"></i> Disk details
+        </h3>
+        <pre class="nv-pre" style="max-height: 180px;">{{ system_info.disk_details }}</pre>
+    </div>
+    {% endif %}
+
+    {# ---------- VPS List ---------- #}
+    <div class="card">
+        <h3 style="margin: 0 0 1rem 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <i class="fas fa-server" style="color: var(--accent-info);"></i>
+            <span>VPS on this node</span>
+            <span class="badge badge-secondary">{{ vps_count|default(0) }}</span>
+        </h3>
+
+        {% if vps_list %}
+        <div class="nv-table-wrap">
+            <table class="nv-table">
+                <thead>
+                    <tr>
+                        <th>Hostname</th>
+                        <th>Container</th>
+                        <th>Status</th>
+                        <th>Resources</th>
+                        <th>Created</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vps in vps_list %}
+                    <tr>
+                        <td><strong>{{ vps.hostname or vps.container_name }}</strong></td>
+                        <td><code>{{ vps.container_name }}</code></td>
+                        <td>
+                            {% if vps.suspended %}
+                            <span class="badge badge-danger">Suspended</span>
+                            {% elif vps.live_status == 'running' %}
+                            <span class="badge badge-success">Running</span>
+                            {% elif vps.live_status == 'stopped' %}
+                            <span class="badge badge-danger">Stopped</span>
+                            {% else %}
+                            <span class="badge badge-warning">{{ (vps.live_status or 'unknown')|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-info">{{ vps.cpu }} CPU</span>
+                            <span class="badge badge-info">{{ vps.ram }}</span>
+                            <span class="badge badge-info">{{ vps.storage }}</span>
+                        </td>
+                        <td style="white-space: nowrap;">{{ vps.created_at[:10] if vps.created_at else 'N/A' }}</td>
+                        <td style="text-align: right;">
+                            <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="btn btn-sm btn-outline" title="View VPS">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="nv-empty">
+            <i class="fas fa-inbox"></i>
+            <div>No VPS on this node yet.</div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>{# /.nv-wrap #}
+{% endblock %}

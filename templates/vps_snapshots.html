@@ -1,0 +1,1081 @@
+{% extends "base.html" %}
+{% block title %}Snapshots - {{ vps.hostname or vps.container_name }} - {{ panel_name }}{% endblock %}
+{% block header_title %}VPS Snapshots{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('vps_list') }}" class="breadcrumb-item">My VPS</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="breadcrumb-item">{{ vps.hostname or vps.container_name }}</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Snapshots</span>
+</div>
+{% endblock %}
+{% block content %}
+
+<!-- VPS Header -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="user-avatar" style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-hover));">
+                <i class="fas fa-camera" style="font-size: 1.5rem;"></i>
+            </div>
+            <div>
+                <h2 style="font-size: 1.25rem; margin-bottom: 0.25rem;">{{ vps.hostname or vps.container_name }}</h2>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                    <span class="badge badge-info">{{ snapshot_count }} / {{ snapshot_limit }} Snapshots</span>
+                </div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+            <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to VPS
+            </a>
+            {% if snapshot_count < snapshot_limit %}
+            <button class="btn btn-primary" onclick="showCreateSnapshotModal()">
+                <i class="fas fa-plus"></i> Create Snapshot
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Snapshot Schedule Card -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <h3 style="font-size: 1.125rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        <i class="fas fa-clock"></i> Automatic Snapshot Schedule
+    </h3>
+    <div class="form-group">
+        <label class="checkbox-label">
+            <input type="checkbox" id="schedule-enabled" {% if schedule and schedule.enabled %}checked{% endif %}>
+            <span>Enable automatic snapshots</span>
+        </label>
+    </div>
+    <div id="schedule-options" style="{% if not schedule or not schedule.enabled %}display: none;{% endif %}">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="schedule-frequency">Frequency</label>
+                <select id="schedule-frequency" class="form-control">
+                    <option value="hourly" {% if schedule and schedule.frequency == 'hourly' %}selected{% endif %}>Hourly</option>
+                    <option value="daily" {% if schedule and schedule.frequency == 'daily' %}selected{% endif %}>Daily</option>
+                    <option value="weekly" {% if schedule and schedule.frequency == 'weekly' %}selected{% endif %}>Weekly</option>
+                    <option value="monthly" {% if schedule and schedule.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="schedule-retention">Keep Last</label>
+                <input type="number" id="schedule-retention" class="form-control" min="1" max="30" 
+                       value="{{ schedule.retention_count if schedule else 7 }}">
+                <small class="form-text">Number of automatic snapshots to keep</small>
+            </div>
+        </div>
+        {% if schedule and schedule.last_run %}
+        <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+            <i class="fas fa-info-circle"></i> Last run: {{ schedule.last_run|relative_time }}
+        </div>
+        {% endif %}
+    </div>
+    <div style="margin-top: 1rem;">
+        <button class="btn btn-primary" onclick="saveSchedule()">
+            <i class="fas fa-save"></i> Save Schedule
+        </button>
+    </div>
+</div>
+
+<!-- Snapshots List -->
+<div class="card">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.125rem; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fas fa-list"></i> Snapshots
+        </h3>
+        <button class="btn btn-secondary" onclick="showUploadModal()" style="color: white;">
+            <i class="fas fa-upload text-white"></i> Upload Snapshot
+        </button>
+    </div>
+
+    {% if snapshots %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Created</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for snapshot in snapshots %}
+                <tr>
+                    <td>
+                        <strong>{{ snapshot.snapshot_name }}</strong>
+                        {% if snapshot.stateful %}
+                        <span class="badge badge-info" title="Stateful snapshot (includes RAM)">
+                            <i class="fas fa-memory"></i> Stateful
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>{{ snapshot.description or '-' }}</td>
+                    <td>
+                        {% if snapshot.snapshot_type == 'automatic' %}
+                        <span class="badge badge-success"><i class="fas fa-robot"></i> Auto</span>
+                        {% else %}
+                        <span class="badge badge-primary"><i class="fas fa-user"></i> Manual</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if snapshot.size_bytes > 0 %}
+                            {% set size_gb = snapshot.size_bytes / (1024 * 1024 * 1024) %}
+                            {% if size_gb >= 1 %}
+                                {{ "%.2f"|format(size_gb) }} GB
+                            {% else %}
+                                {% set size_mb = snapshot.size_bytes / (1024 * 1024) %}
+                                {{ "%.2f"|format(size_mb) }} MB
+                            {% endif %}
+                            {% if size_gb == 10.0 or size_gb == 6.0 %}
+                            <small style="color: var(--text-tertiary);" title="Estimated size based on VPS storage allocation">(est.)</small>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: var(--text-tertiary);">Unknown</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ snapshot.created_at|relative_time }}</td>
+                    <td>{{ snapshot.created_by_username or 'System' }}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-success" onclick="restoreSnapshot({{ snapshot.id }}, '{{ snapshot.snapshot_name }}')" 
+                                    title="Restore from this snapshot">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="downloadSnapshot({{ snapshot.id }})"
+                                    title="Download snapshot as tar.gz backup (works for both local & remote nodes)">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteSnapshot({{ snapshot.id }}, '{{ snapshot.snapshot_name }}')" 
+                                    title="Delete snapshot">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-camera" style="font-size: 3rem; color: var(--text-tertiary); margin-bottom: 1rem;"></i>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">No snapshots yet</p>
+        <p style="color: var(--text-tertiary); font-size: 0.875rem;">Create your first snapshot to backup your VPS state</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create Snapshot Modal -->
+<div id="createSnapshotModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-camera"></i> Create Snapshot</h3>
+            <button class="modal-close" onclick="closeCreateSnapshotModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="snapshot-form">
+                <div class="form-group">
+                    <label for="snapshot-name">Snapshot Name *</label>
+                    <input type="text" id="snapshot-name" class="form-control" placeholder="e.g., before-update" required>
+                    <small class="form-text">Only letters, numbers, hyphens, and underscores allowed</small>
+                </div>
+                <div class="form-group">
+                    <label for="snapshot-description">Description</label>
+                    <textarea id="snapshot-description" class="form-control" rows="3" placeholder="Optional description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="snapshot-stateful">
+                        <span>Stateful snapshot (includes RAM state)</span>
+                    </label>
+                    <small class="form-text">Stateful snapshots are larger but preserve running processes</small>
+                </div>
+            </div>
+            <div id="snapshot-progress-container" style="display: none;">
+                <div style="text-align: center; margin-bottom: 1rem;">
+                    <i class="fas fa-camera fa-3x" style="color: var(--accent-primary); animation: pulse 2s infinite;"></i>
+                </div>
+                <div class="progress-bar" style="height: 20px; margin-bottom: 1rem;">
+                    <div class="progress-fill" id="snapshot-progress-fill" style="transition: width 0.5s ease;"></div>
+                </div>
+                <p style="text-align: center; color: var(--text-secondary);" id="snapshot-progress-text">Preparing snapshot...</p>
+                <p style="text-align: center; color: var(--text-tertiary); font-size: 0.875rem;">This may take several minutes for large containers</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCreateSnapshotModal()" id="snapshot-cancel-btn">Cancel</button>
+            <button class="btn btn-primary" onclick="createSnapshot()" id="snapshot-create-btn">
+                <i class="fas fa-camera"></i> Create Snapshot
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Snapshot Modal -->
+<div id="uploadSnapshotModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-upload"></i> Upload Backup</h3>
+            <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-info" style="margin-bottom: 1rem;">
+                <i class="fas fa-info-circle"></i> Upload a full VPS backup (.tar.gz) to restore your container.
+                This will replace the current VPS with the backup and create a snapshot of the restored state.
+                Works for both local and remote nodes — the file is streamed through the panel to the node.
+            </div>
+            <div class="form-group">
+                <label for="snapshot-file">Backup File *</label>
+                <input type="file" id="snapshot-file" class="form-control" accept=".tar.gz,.tar,.tgz" required>
+                <small class="form-text">Supported formats: .tar.gz, .tar, .tgz (full LXC container backups)</small>
+            </div>
+            <div id="upload-progress" style="display: none; margin-top: 1rem;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="upload-progress-fill"></div>
+                </div>
+                <p style="text-align: center; margin-top: 0.5rem; color: var(--text-secondary);" id="upload-status">Uploading...</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="uploadSnapshot()" id="upload-btn">
+                <i class="fas fa-upload"></i> Upload & Restore
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Floating transfer manager (upload/download progress) -->
+<div id="xferStack" class="xfer-stack" aria-live="polite"></div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.btn-group {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}
+
+/* ===== Floating transfer manager =====
+   Shows live upload / download progress at the bottom-right of the page.
+   Persists across modal opens/closes and supports cancel, minimize and
+   multiple concurrent transfers. */
+.xfer-stack {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 380px;
+    width: calc(100vw - 32px);
+    pointer-events: none;
+}
+.xfer-card {
+    pointer-events: auto;
+    background: linear-gradient(160deg, rgba(22, 26, 32, 0.97), rgba(13, 15, 20, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 22px 50px -18px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(102, 126, 234, 0.05);
+    color: var(--text-primary, #e6eef9);
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: xferSlideIn 0.3s cubic-bezier(.21, 1.02, .73, 1);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+@keyframes xferSlideIn {
+    from { transform: translateY(20px) scale(0.95); opacity: 0; }
+    to   { transform: translateY(0) scale(1);       opacity: 1; }
+}
+@keyframes xferSlideOut {
+    to { transform: translateY(20px) scale(0.95); opacity: 0; }
+}
+.xfer-card.removing { animation: xferSlideOut 0.25s ease forwards; }
+
+.xfer-head {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+    user-select: none;
+}
+.xfer-icon {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; flex-shrink: 0;
+}
+.xfer-card.kind-upload   .xfer-icon { background: rgba(79, 172, 254, 0.18); color: #4facfe; border: 1px solid rgba(79, 172, 254, 0.4); }
+.xfer-card.kind-download .xfer-icon { background: rgba(52, 211, 153, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); }
+.xfer-card.state-error    .xfer-icon { background: rgba(239, 68, 68, 0.18); color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
+.xfer-card.state-done     .xfer-icon { background: rgba(52, 211, 153, 0.18); color: #34d399; border-color: rgba(52, 211, 153, 0.4); }
+
+.xfer-meta { flex: 1; min-width: 0; }
+.xfer-title {
+    font-size: 0.85rem; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--text-primary, #fff);
+}
+.xfer-sub {
+    font-size: 0.7rem; color: rgba(154, 164, 178, 0.85);
+    margin-top: 0.1rem;
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+}
+.xfer-sub .dot { opacity: 0.5; }
+
+.xfer-actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
+.xfer-btn {
+    width: 26px; height: 26px;
+    border: none; background: rgba(255, 255, 255, 0.04);
+    color: rgba(154, 164, 178, 0.85);
+    border-radius: 7px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+}
+.xfer-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+.xfer-btn.cancel:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.xfer-body { padding: 0 0.9rem 0.85rem; }
+.xfer-card.minimized .xfer-body { display: none; }
+.xfer-card.minimized .xfer-head { padding-bottom: 0.7rem; }
+
+.xfer-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 99px;
+    overflow: hidden;
+    position: relative;
+}
+.xfer-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #667eea, #4facfe);
+    width: 0%;
+    transition: width 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+.xfer-card.kind-download .xfer-fill {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+.xfer-card.state-error .xfer-fill {
+    background: linear-gradient(90deg, #ef4444, #f97316);
+}
+.xfer-card.state-done .xfer-fill {
+    background: linear-gradient(90deg, #10b981, #34d399);
+    width: 100% !important;
+}
+.xfer-fill::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.18) 50%,
+        transparent 100%);
+    animation: xferShimmer 1.4s linear infinite;
+}
+.xfer-card.state-done .xfer-fill::after,
+.xfer-card.state-error .xfer-fill::after,
+.xfer-card.state-indet .xfer-fill::after {
+    display: none;
+}
+.xfer-card.state-indet .xfer-fill {
+    width: 35% !important;
+    animation: xferIndet 1.6s ease-in-out infinite;
+}
+@keyframes xferShimmer {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(100%); }
+}
+@keyframes xferIndet {
+    0%   { margin-left: -35%; }
+    50%  { margin-left: 50%;  }
+    100% { margin-left: 100%; }
+}
+
+.xfer-stats {
+    display: flex; justify-content: space-between; gap: 0.5rem;
+    margin-top: 0.55rem;
+    font-size: 0.72rem;
+    color: rgba(154, 164, 178, 0.95);
+}
+.xfer-stats .pct { font-weight: 600; color: var(--text-primary, #e6eef9); }
+
+.xfer-status-line {
+    margin-top: 0.45rem;
+    font-size: 0.72rem;
+    color: rgba(154, 164, 178, 0.85);
+}
+.xfer-card.state-error .xfer-status-line { color: #fca5a5; }
+.xfer-card.state-done  .xfer-status-line { color: #6ee7b7; }
+
+@media (max-width: 480px) {
+    .xfer-stack {
+        bottom: 8px; right: 8px; left: 8px;
+        max-width: none; width: auto;
+    }
+}
+</style>
+
+<script>
+const vpsId = {{ vps.id }};
+
+// Schedule management
+document.getElementById('schedule-enabled').addEventListener('change', function() {
+    document.getElementById('schedule-options').style.display = this.checked ? 'block' : 'none';
+});
+
+function saveSchedule() {
+    const enabled = document.getElementById('schedule-enabled').checked;
+    const frequency = document.getElementById('schedule-frequency').value;
+    const retention = parseInt(document.getElementById('schedule-retention').value);
+
+    fetch(`/vps/${vpsId}/snapshots/schedule`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            enabled: enabled,
+            frequency: frequency,
+            retention_count: retention
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Schedule saved successfully', 'success');
+        } else {
+            showNotification(data.error || 'Failed to save schedule', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to save schedule', 'error');
+    });
+}
+
+// Create snapshot modal
+function showCreateSnapshotModal() {
+    document.getElementById('createSnapshotModal').style.display = 'flex';
+    document.getElementById('snapshot-name').value = '';
+    document.getElementById('snapshot-description').value = '';
+    document.getElementById('snapshot-stateful').checked = false;
+}
+
+function closeCreateSnapshotModal() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+    document.getElementById('createSnapshotModal').style.display = 'none';
+    resetSnapshotModal();
+}
+
+function createSnapshot() {
+    const name = document.getElementById('snapshot-name').value.trim();
+    const description = document.getElementById('snapshot-description').value.trim();
+    const stateful = document.getElementById('snapshot-stateful').checked;
+
+    if (!name) {
+        showNotification('Please enter a snapshot name', 'error');
+        return;
+    }
+
+    // Validate name
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        showNotification('Snapshot name can only contain letters, numbers, hyphens, and underscores', 'error');
+        return;
+    }
+
+    // Show progress UI
+    document.getElementById('snapshot-form').style.display = 'none';
+    document.getElementById('snapshot-progress-container').style.display = 'block';
+    document.getElementById('snapshot-create-btn').disabled = true;
+    document.getElementById('snapshot-cancel-btn').disabled = true;
+
+    fetch(`/vps/${vpsId}/snapshots/create`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            name: name,
+            description: description,
+            stateful: stateful
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Start polling for progress
+            pollSnapshotProgress();
+        } else {
+            showNotification(data.error || 'Failed to create snapshot', 'error');
+            resetSnapshotModal();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to create snapshot', 'error');
+        resetSnapshotModal();
+    });
+}
+
+let progressInterval = null;
+
+function pollSnapshotProgress() {
+    progressInterval = setInterval(() => {
+        fetch(`/vps/${vpsId}/snapshots/progress`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.progress) {
+                    const progress = data.progress;
+                    const progressPercent = progress.progress || 0;
+                    
+                    // Update progress bar
+                    document.getElementById('snapshot-progress-fill').style.width = progressPercent + '%';
+                    
+                    // Update status text
+                    let statusText = 'Creating snapshot...';
+                    if (progress.status === 'preparing') {
+                        statusText = 'Preparing snapshot...';
+                    } else if (progress.status === 'creating') {
+                        statusText = 'Creating snapshot...';
+                    } else if (progress.status === 'completed') {
+                        statusText = 'Snapshot created successfully!';
+                        clearInterval(progressInterval);
+                        showNotification('Snapshot created successfully', 'success');
+                        setTimeout(() => {
+                            closeCreateSnapshotModal();
+                            location.reload();
+                        }, 1500);
+                    } else if (progress.status === 'failed') {
+                        statusText = 'Snapshot creation failed';
+                        clearInterval(progressInterval);
+                        showNotification(progress.error || 'Failed to create snapshot', 'error');
+                        setTimeout(() => resetSnapshotModal(), 2000);
+                    }
+                    
+                    document.getElementById('snapshot-progress-text').textContent = statusText;
+                }
+            })
+            .catch(error => {
+                console.error('Error polling progress:', error);
+            });
+    }, 2000); // Poll every 2 seconds
+}
+
+function resetSnapshotModal() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+    document.getElementById('snapshot-form').style.display = 'block';
+    document.getElementById('snapshot-progress-container').style.display = 'none';
+    document.getElementById('snapshot-create-btn').disabled = false;
+    document.getElementById('snapshot-cancel-btn').disabled = false;
+    document.getElementById('snapshot-progress-fill').style.width = '0%';
+}
+
+// Restore snapshot
+function restoreSnapshot(snapshotId, snapshotName) {
+    if (!confirm(`Are you sure you want to restore from snapshot "${snapshotName}"?\n\nThis will replace your current VPS state with the snapshot. This action cannot be undone.`)) {
+        return;
+    }
+
+    showNotification('Restoring snapshot...', 'info');
+
+    fetch(`/vps/${vpsId}/snapshots/${snapshotId}/restore`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message || 'Snapshot restored successfully', 'success');
+            setTimeout(() => window.location.href = `/vps/${vpsId}`, 2000);
+        } else {
+            showNotification(data.error || 'Failed to restore snapshot', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to restore snapshot', 'error');
+    });
+}
+
+// Delete snapshot
+function deleteSnapshot(snapshotId, snapshotName) {
+    if (!confirm(`Are you sure you want to delete snapshot "${snapshotName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    showNotification('Deleting snapshot...', 'info');
+
+    fetch(`/vps/${vpsId}/snapshots/${snapshotId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message || 'Snapshot deleted successfully', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification(data.error || 'Failed to delete snapshot', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to delete snapshot', 'error');
+    });
+}
+
+// ============================================================================
+//  Floating transfer manager — handles upload + download progress UI
+// ============================================================================
+const XferManager = (() => {
+    const stackEl = document.getElementById('xferStack');
+    let nextId = 0;
+    const cards = new Map();
+
+    function fmtBytes(n) {
+        if (n == null || isNaN(n) || n < 0) return '—';
+        if (n === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+        return (n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + ' ' + units[i];
+    }
+    function fmtSpeed(bps) {
+        if (!isFinite(bps) || bps <= 0) return '— /s';
+        return fmtBytes(bps) + '/s';
+    }
+    function fmtEta(seconds) {
+        if (!isFinite(seconds) || seconds < 0) return '—';
+        if (seconds < 1) return '<1s';
+        if (seconds < 60) return Math.round(seconds) + 's';
+        if (seconds < 3600) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.round(seconds % 60);
+            return `${m}m ${s}s`;
+        }
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${h}h ${m}m`;
+    }
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function create({kind, title, sub, indeterminate = false}) {
+        const id = ++nextId;
+        const card = document.createElement('div');
+        card.className = `xfer-card kind-${kind}` + (indeterminate ? ' state-indet' : '');
+        card.dataset.id = id;
+        const icon = kind === 'upload'
+            ? '<i class="fas fa-cloud-upload-alt"></i>'
+            : '<i class="fas fa-cloud-download-alt"></i>';
+        card.innerHTML = `
+            <div class="xfer-head" role="button" title="Click to minimize / expand">
+                <div class="xfer-icon">${icon}</div>
+                <div class="xfer-meta">
+                    <div class="xfer-title">${esc(title)}</div>
+                    <div class="xfer-sub">
+                        <span class="x-state">${indeterminate ? 'Preparing…' : 'Starting…'}</span>
+                        <span class="dot">·</span>
+                        <span class="x-sub">${esc(sub || '')}</span>
+                    </div>
+                </div>
+                <div class="xfer-actions">
+                    <button class="xfer-btn cancel" title="Cancel"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div class="xfer-body">
+                <div class="xfer-bar"><div class="xfer-fill"></div></div>
+                <div class="xfer-stats">
+                    <span class="x-progress">${indeterminate ? '—' : '0 B / —'}</span>
+                    <span class="pct">${indeterminate ? '' : '0%'}</span>
+                </div>
+                <div class="xfer-stats">
+                    <span><i class="fas fa-bolt"></i> <span class="x-speed">— /s</span></span>
+                    <span><i class="far fa-clock"></i> ETA <span class="x-eta">—</span></span>
+                </div>
+                <div class="xfer-status-line x-status" style="display:none;"></div>
+            </div>
+        `;
+        card.querySelector('.xfer-head').addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            card.classList.toggle('minimized');
+        });
+        stackEl.appendChild(card);
+
+        const startTs = performance.now();
+        const handle = {
+            id, card, kind, title,
+            loaded: 0, total: 0,
+            startTs,
+            cancelled: false,
+            xhr: null, abort: null,
+            update({loaded, total, status}) {
+                if (this.cancelled) return;
+                if (loaded != null) this.loaded = loaded;
+                if (total != null && total > 0) this.total = total;
+                const fillEl  = card.querySelector('.xfer-fill');
+                const pctEl   = card.querySelector('.pct');
+                const progEl  = card.querySelector('.x-progress');
+                const spdEl   = card.querySelector('.x-speed');
+                const etaEl   = card.querySelector('.x-eta');
+                const stateEl = card.querySelector('.x-state');
+                if (status) stateEl.textContent = status;
+
+                if (this.total > 0) {
+                    card.classList.remove('state-indet');
+                    const pct = Math.min(100, (this.loaded / this.total) * 100);
+                    fillEl.style.width = pct + '%';
+                    pctEl.textContent = pct.toFixed(pct < 10 ? 1 : 0) + '%';
+                    progEl.textContent = `${fmtBytes(this.loaded)} / ${fmtBytes(this.total)}`;
+                } else {
+                    progEl.textContent = fmtBytes(this.loaded) + ' transferred';
+                    pctEl.textContent = '';
+                }
+                const elapsed = Math.max(0.001, (performance.now() - this.startTs) / 1000);
+                const speed = this.loaded / elapsed;
+                spdEl.textContent = fmtSpeed(speed);
+                if (this.total > 0 && speed > 0) {
+                    etaEl.textContent = fmtEta((this.total - this.loaded) / speed);
+                } else {
+                    etaEl.textContent = '—';
+                }
+            },
+            done(msg) {
+                if (this.cancelled) return;
+                card.classList.remove('state-indet');
+                card.classList.add('state-done');
+                card.querySelector('.xfer-fill').style.width = '100%';
+                card.querySelector('.x-state').textContent = 'Completed';
+                card.querySelector('.pct').textContent = '100%';
+                const status = card.querySelector('.x-status');
+                status.style.display = 'block';
+                status.innerHTML = `<i class="fas fa-check-circle"></i> ${esc(msg || 'Done')}`;
+                const btn = card.querySelector('.xfer-btn.cancel');
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.title = 'Dismiss';
+                btn.classList.remove('cancel');
+                btn.onclick = () => this.remove();
+                // Auto-dismiss successful transfers after 8 s.
+                setTimeout(() => this.remove(), 8000);
+            },
+            fail(msg) {
+                if (this.cancelled) return;
+                card.classList.remove('state-indet');
+                card.classList.add('state-error');
+                card.querySelector('.x-state').textContent = 'Failed';
+                const status = card.querySelector('.x-status');
+                status.style.display = 'block';
+                status.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${esc(msg || 'Transfer failed')}`;
+                const btn = card.querySelector('.xfer-btn.cancel');
+                btn.title = 'Dismiss';
+                btn.classList.remove('cancel');
+                btn.onclick = () => this.remove();
+            },
+            cancel(reason) {
+                this.cancelled = true;
+                try { if (this.abort) this.abort(); } catch (e) {}
+                try { if (this.xhr) this.xhr.abort(); } catch (e) {}
+                card.classList.remove('state-indet');
+                card.classList.add('state-error');
+                card.querySelector('.x-state').textContent = 'Cancelled';
+                const status = card.querySelector('.x-status');
+                status.style.display = 'block';
+                status.innerHTML = `<i class="fas fa-ban"></i> ${esc(reason || 'Cancelled by user')}`;
+                const btn = card.querySelector('.xfer-btn.cancel');
+                btn.title = 'Dismiss';
+                btn.classList.remove('cancel');
+                btn.onclick = () => this.remove();
+            },
+            remove() {
+                card.classList.add('removing');
+                setTimeout(() => {
+                    card.remove();
+                    cards.delete(id);
+                }, 250);
+            },
+        };
+        card.querySelector('.xfer-btn.cancel').addEventListener('click', () => {
+            handle.cancel();
+        });
+        cards.set(id, handle);
+        return handle;
+    }
+
+    function hasActive() {
+        for (const h of cards.values()) {
+            if (!h.cancelled
+                && !h.card.classList.contains('state-done')
+                && !h.card.classList.contains('state-error')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    return { create, hasActive };
+})();
+
+// ============================================================================
+//  Upload  /  Download  (with floating progress, no full-page reloads)
+// ============================================================================
+
+function downloadSnapshot(snapshotId) {
+    // Find the friendly snapshot name for the toast / card.
+    const btn = event && event.currentTarget;
+    const snapName = btn && btn.closest('tr')
+        ? (btn.closest('tr').querySelector('strong')
+           ? btn.closest('tr').querySelector('strong').textContent.trim()
+           : `Snapshot #${snapshotId}`)
+        : `Snapshot #${snapshotId}`;
+
+    const xfer = XferManager.create({
+        kind: 'download',
+        title: snapName,
+        sub: 'Preparing on node…',
+        indeterminate: true,
+    });
+
+    const controller = new AbortController();
+    xfer.abort = () => controller.abort();
+
+    fetch(`/vps/${vpsId}/snapshots/${snapshotId}/download`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        signal: controller.signal,
+    }).then(async (response) => {
+        if (!response.ok) {
+            // Try to parse a JSON error body — the server returns JSON for AJAX.
+            let msg = `HTTP ${response.status}`;
+            try {
+                const ct = response.headers.get('Content-Type') || '';
+                if (ct.includes('application/json')) {
+                    const j = await response.json();
+                    msg = j.error || j.message || msg;
+                } else {
+                    msg = await response.text().then(t => t.slice(0, 200)) || msg;
+                }
+            } catch (e) {}
+            throw new Error(msg);
+        }
+
+        // Parse the filename out of Content-Disposition.
+        let filename = `${snapName.replace(/[^a-zA-Z0-9._-]/g, '_')}.tar.gz`;
+        const cd = response.headers.get('Content-Disposition') || '';
+        const m = /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i.exec(cd);
+        if (m && m[1]) filename = decodeURIComponent(m[1]).replace(/^["']|["']$/g, '');
+
+        const totalHdr = response.headers.get('Content-Length');
+        const total = totalHdr ? parseInt(totalHdr, 10) : 0;
+
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+
+        xfer.update({loaded: 0, total: total || 0, status: 'Downloading'});
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (xfer.cancelled) {
+                try { reader.cancel(); } catch (e) {}
+                return;
+            }
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            xfer.update({loaded: received, total: total || 0});
+        }
+
+        if (xfer.cancelled) return;
+
+        // Assemble + trigger save dialog.
+        const blob = new Blob(chunks, {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+        xfer.done(`Saved ${filename} (${(received / (1024*1024)).toFixed(1)} MB)`);
+    }).catch((err) => {
+        if (err.name === 'AbortError' || xfer.cancelled) return;
+        console.error('Snapshot download error:', err);
+        xfer.fail(err.message || 'Download failed');
+    });
+}
+
+// Upload snapshot modal
+function showUploadModal() {
+    document.getElementById('uploadSnapshotModal').style.display = 'flex';
+    document.getElementById('snapshot-file').value = '';
+}
+
+function closeUploadModal() {
+    document.getElementById('uploadSnapshotModal').style.display = 'none';
+}
+
+function uploadSnapshot() {
+    const fileInput = document.getElementById('snapshot-file');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        showNotification('Please select a file', 'error');
+        return;
+    }
+    if (!/\.(tar\.gz|tar|tgz)$/i.test(file.name)) {
+        showNotification('Only .tar.gz, .tar or .tgz files are allowed', 'error');
+        return;
+    }
+
+    // Close the modal immediately — the floating panel takes over.
+    closeUploadModal();
+
+    const xfer = XferManager.create({
+        kind: 'upload',
+        title: file.name,
+        sub: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+    });
+
+    const xhr = new XMLHttpRequest();
+    xfer.xhr = xhr;
+
+    // True end-to-end progress: the browser only gets ACKs as fast as the
+    // node-agent actually reads bytes, because the panel forwards the
+    // request body chunk-by-chunk to the agent inside the same handler.
+    xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+            xfer.update({loaded: e.loaded, total: e.total, status: 'Uploading'});
+        }
+    });
+    xhr.upload.addEventListener('load', () => {
+        // Bytes are all delivered — switch to indeterminate while the
+        // node-agent imports + restores.
+        xfer.card.classList.add('state-indet');
+        xfer.update({status: 'Restoring on node…'});
+        const etaEl = xfer.card.querySelector('.x-eta');
+        if (etaEl) etaEl.textContent = '—';
+    });
+
+    xhr.addEventListener('load', () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status >= 200 && xhr.status < 300 && data && data.success) {
+            xfer.done(data.message || `Restored as snapshot "${data.snapshot_name || ''}"`);
+            // Refresh the snapshot list so the new "restored_*" row appears.
+            setTimeout(() => location.reload(), 2500);
+        } else {
+            const msg = (data && (data.error || data.message))
+                || `HTTP ${xhr.status} — upload failed`;
+            xfer.fail(msg);
+        }
+    });
+    xhr.addEventListener('error', () => xfer.fail('Network error'));
+    xhr.addEventListener('abort', () => {
+        if (!xfer.cancelled) xfer.fail('Upload aborted');
+    });
+
+    // Raw octet-stream upload — bypasses Werkzeug's multipart parser so
+    // the server can read the body chunk-by-chunk and forward each chunk
+    // to the agent. THIS is what makes the progress bar accurate.
+    const url = `/vps/${vpsId}/snapshots/upload`
+        + `?filename=${encodeURIComponent(file.name)}`;
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.send(file);
+}
+
+// Warn the user before leaving if a transfer is still in flight.
+window.addEventListener('beforeunload', (e) => {
+    if (XferManager.hasActive()) {
+        e.preventDefault();
+        e.returnValue = 'A snapshot transfer is still in progress. Leave anyway?';
+        return e.returnValue;
+    }
+});
+
+// Notification helper
+function showNotification(message, type) {
+    // Use existing notification system if available
+    if (typeof showToast === 'function') {
+        showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
+
+// Close modals on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeCreateSnapshotModal();
+        closeUploadModal();
+    }
+});
+</script>
+
+{% endblock %}

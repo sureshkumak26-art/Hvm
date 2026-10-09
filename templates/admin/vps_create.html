@@ -1,0 +1,750 @@
+{% extends "base.html" %}
+
+{% block title %}Create New VPS - {{ panel_name }}{% endblock %}
+
+{% block header_title %}Create New VPS{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_dashboard') }}" class="breadcrumb-item">Admin</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('admin_vps') }}" class="breadcrumb-item">VPS</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Create</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 1rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-plus-circle"></i>
+                New Virtual Private Server
+            </h3>
+        </div>
+
+        <div class="card-body">
+            <form id="createVPSForm">
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Owner <span style="color: var(--accent-danger);">*</span></label>
+                        <select id="user_id" class="form-control" required>
+                            <option value="">Select user...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if request.args.user_id == user.id|string %}selected{% endif %}>
+                                {{ user.username }} ({{ user.email }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Node <span style="color: var(--accent-danger);">*</span></label>
+                        <select id="node_id" class="form-control" required>
+                            <option value="">Select node...</option>
+                            {% for node in nodes %}
+                            <option value="{{ node.id }}" data-used="{{ node.used_vps }}" data-total="{{ node.total_vps }}">
+                                {{ node.name }} ({{ node.location }}) - {{ node.used_vps }}/{{ node.total_vps }} VPS
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div id="node-health-status" style="margin-top: 0.5rem; display: none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Hostname</label>
+                        <input type="text" id="hostname" class="form-control" placeholder="e.g., my-vps-01">
+                        <small style="color: var(--text-muted);">Leave blank for auto-generated name</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Operating System <span style="color: var(--accent-danger);">*</span></label>
+                        <select id="os_version" class="form-control" required>
+                            {% for os in os_options %}
+                            <option value="{{ os.value }}" {% if loop.index == 1 %}selected{% endif %}>
+                                {{ os.label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">CPU Cores <span style="color: var(--accent-danger);">*</span></label>
+                        <input type="number" id="cpu" class="form-control" value="2" min="1" max="64" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">RAM (GB) <span style="color: var(--accent-danger);">*</span></label>
+                        <input type="number" id="ram" class="form-control" value="2" min="1" max="128" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Disk (GB) <span style="color: var(--accent-danger);">*</span></label>
+                        <input type="number" id="disk" class="form-control" value="20" min="5" max="2000" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Swap Memory</label>
+                        <input type="text" class="form-control" value="PERMANENTLY DISABLED" disabled readonly>
+                        <small style="color: var(--text-muted);">Swap memory is permanently disabled for all VPS to ensure optimal performance and resource isolation.</small>
+                    </div>
+                </div>
+
+                <!-- Advanced Features -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-cogs"></i>
+                            Advanced Features
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="kvm_enabled" style="width: auto; margin: 0;">
+                                Enable KVM Access (Nested Virtualization)
+                            </label>
+                            <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                                Allows running virtual machines inside the VPS. Requires host CPU virtualization support.
+                            </small>
+                        </div>
+                        
+                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--border-radius-sm); padding: 1rem; margin-top: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                                <i class="fas fa-info-circle" style="color: #3b82f6;"></i>
+                                <strong style="color: #3b82f6;">KVM Access Information</strong>
+                            </div>
+                            <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                <li>Enables nested virtualization for running VMs inside the VPS</li>
+                                <li>Provides access to /dev/kvm device for hardware acceleration</li>
+                                <li>Required for running Docker, KVM, QEMU, or other hypervisors</li>
+                                <li>Host CPU must support Intel VT-x or AMD-V</li>
+                                <li>May have slight performance overhead</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bandwidth Quota -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-database"></i>
+                            Bandwidth Quota
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">Bandwidth Quota (GB)</label>
+                            <input type="number" id="bandwidth_quota_gb" class="form-control" value="0" min="0" max="10000" placeholder="0 = Unlimited">
+                            <small style="color: var(--text-muted);">Total bandwidth limit in GB (0 for unlimited)</small>
+                        </div>
+                        
+                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--border-radius-sm); padding: 1rem; margin-top: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                                <i class="fas fa-info-circle" style="color: #3b82f6;"></i>
+                                <strong style="color: #3b82f6;">Bandwidth Quota Information</strong>
+                            </div>
+                            <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                <li>Bandwidth quota limits total data transfer (upload + download)</li>
+                                <li>VPS will be monitored and may be suspended when quota is exceeded</li>
+                                <li>Usage is tracked from container network interface statistics</li>
+                                <li>Set to 0 for unlimited bandwidth (not recommended for production)</li>
+                                <li>Quota can be changed and usage can be reset after VPS creation</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Snapshot Limit -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-camera"></i>
+                            Snapshot Limit
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">Maximum Snapshots</label>
+                            <input type="number" id="snapshot_limit" class="form-control" value="5" min="0" max="50" placeholder="5">
+                            <small style="color: var(--text-muted);">Maximum number of snapshots user can create (default: 5)</small>
+                        </div>
+                        
+                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--border-radius-sm); padding: 1rem; margin-top: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                                <i class="fas fa-info-circle" style="color: #3b82f6;"></i>
+                                <strong style="color: #3b82f6;">Snapshot Limit Information</strong>
+                            </div>
+                            <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                <li>Snapshots allow users to backup and restore VPS state</li>
+                                <li>Users can create manual snapshots or schedule automatic backups</li>
+                                <li>Both manual and automatic snapshots count towards this limit</li>
+                                <li>Set to 0 to disable snapshots for this VPS</li>
+                                <li>Recommended: 5-10 snapshots for most use cases</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IP Address Configuration -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-globe"></i>
+                            IP Address Configuration
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Master toggle: when unchecked, the entire IP-config
+                             block is visually disabled and ignored on submit.
+                             Default OFF for new VPS — admins explicitly opt in. -->
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="ipc_configure" style="width: auto; margin: 0;">
+                                <span style="font-weight: 600;">Configure Public IP Address</span>
+                            </label>
+                            <small style="color: var(--text-muted); display: block; margin-top: 0.25rem; padding-left: 1.65rem;">
+                                Leave unchecked to skip public-IP setup entirely. The VPS will install with only its default <span class="ipc-mono" style="font-family: 'Courier New', Consolas, monospace;">lxdbr0</span> internal address (you can attach a public IP later from the VPS's <strong>Manage IP</strong> page).
+                            </small>
+                        </div>
+
+                        <div id="ipc_section" style="display: none;">
+                        <style>
+                        .ipc-grid-create { display: grid; grid-template-columns: 1fr 340px; gap: 1.25rem; }
+                        @media (max-width: 1100px) { .ipc-grid-create { grid-template-columns: 1fr; } }
+                        .ipc-card-inner { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem 1.1rem; margin-bottom: 1rem; }
+                        .ipc-card-inner h5 { margin: 0 0 .85rem 0; font-size: .98rem; display: flex; align-items: center; gap: .5rem; }
+                        .ipc-card-inner h5 i { color: #8b5cf6; }
+                        .ipc-mono { font-family: 'Courier New', Consolas, monospace; word-break: break-all; }
+                        .ipc-kv { display: grid; grid-template-columns: 150px 1fr; gap: .35rem .9rem; font-size: .9rem; }
+                        .ipc-kv .k { color: var(--text-muted); }
+                        .ipc-kv .v { color: var(--text-primary); }
+                        .ipc-pill { display: inline-block; padding: .2rem .55rem; border-radius: 6px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+                        .ipc-pill.ok { background: rgba(16,185,129,.15); color: #10b981; }
+                        .ipc-pill.muted { background: var(--bg-secondary); color: var(--text-muted); }
+                        .ipc-cmd { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: .75rem .85rem; font-family: 'Courier New', Consolas, monospace; font-size: .78rem; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+                        .ipc-cmd .h { color: #8b5cf6; }
+                        .ipc-cmd .lxc { color: #3b82f6; }
+                        .ipc-cmd .ip-ok { color: #10b981; }
+                        .ipc-input-row { display: grid; grid-template-columns: 1fr 110px; gap: .5rem; }
+                        @media (max-width: 520px) { .ipc-input-row { grid-template-columns: 1fr; } }
+                        .ipc-note { padding: .75rem .95rem; border-radius: 8px; font-size: .82rem; line-height: 1.55; }
+                        .ipc-note.info { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--text-secondary); }
+                        .ipc-note strong { color: var(--text-primary); }
+                        </style>
+
+                        <div class="ipc-grid-create">
+                            <!-- LEFT: routed IP form -->
+                            <div>
+                                <div class="ipc-card-inner">
+                                    <h5><i class="fas fa-globe"></i> Routed Public IP</h5>
+
+                                    <div class="ipc-kv" style="margin-bottom: 1rem;">
+                                        <div class="k">Current IP</div>
+                                        <div class="v">
+                                            <span class="ipc-pill muted" id="ipc_current_state">none (new VPS)</span>
+                                        </div>
+                                        <div class="k">Container</div>
+                                        <div class="v ipc-mono" id="ipc_container_preview">
+                                            <span style="color: var(--text-muted);">auto-generated from hostname</span>
+                                        </div>
+                                        <div class="k">Mode</div>
+                                        <div class="v">LXC <span class="ipc-mono">routed</span> NIC (appears as <span class="ipc-mono">eth1</span> inside the VPS)</div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">New IP Address</label>
+                                        <div class="ipc-input-row">
+                                            <input type="text" id="ip_address" class="form-control ipc-mono"
+                                                   placeholder="e.g. 162.141.0.29"
+                                                   autocomplete="off" spellcheck="false">
+                                            <input type="number" id="ip_subnet" class="form-control ipc-mono"
+                                                   value="32" min="0" max="32" title="Subnet (0-32)">
+                                        </div>
+                                        <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                            Enter an IPv4 address and the subnet (default <code>/32</code> for routed NICs). Leave the IP blank to skip public-IP setup at install time.
+                                        </small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">Host Parent Interface</label>
+                                        <input type="text" id="ip_parent_iface" class="form-control ipc-mono"
+                                               value="{{ default_parent_iface or 'eth0' }}"
+                                               placeholder="eth0" autocomplete="off">
+                                        <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                            The host NIC the routed IP will be parented on (the value used for <code>parent=</code> on the LXC NIC).
+                                        </small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">IP Alias (Display Name)</label>
+                                        <input type="text" id="ip_alias" class="form-control" placeholder="e.g. vps1.example.com">
+                                        <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                                            Optional display name shown in the VPS list / detail page. Does not affect networking.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="ipc-card-inner">
+                                    <h5><i class="fas fa-terminal"></i> Commands that will run</h5>
+                                    <p style="color: var(--text-muted); font-size: .82rem; margin: 0 0 .6rem 0;">
+                                        The exact host-side commands that will execute on the selected node during install. Updates live as you type.
+                                    </p>
+                                    <div class="ipc-cmd" id="ipc_cmdPreview">
+                                        <span style="color: var(--text-muted);"># Leave the IP blank to skip public-IP setup at install time.</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- RIGHT: help -->
+                            <div>
+                                <div class="ipc-card-inner">
+                                    <h5><i class="fas fa-circle-info"></i> How Routed IPs Work</h5>
+                                    <p style="color: var(--text-secondary); font-size: .85rem; line-height: 1.6; margin: 0 0 .5rem 0;">
+                                        The panel uses LXC's <strong>routed</strong> NIC type. A device named <span class="ipc-mono">pubip</span> is attached to the container with the public IP, which appears inside the guest as <span class="ipc-mono">eth1</span>. Outbound traffic uses the host's parent interface; inbound traffic is routed by the upstream gateway to this host.
+                                    </p>
+                                    <ul style="margin: .5rem 0 0 1.25rem; color: var(--text-secondary); font-size: .82rem; line-height: 1.7;">
+                                        <li>The IP must already be routed (or assignable) to this host.</li>
+                                        <li>Default mask is <span class="ipc-mono">/32</span> — that's standard for routed NICs.</li>
+                                        <li>The container will be restarted at the end of the network step.</li>
+                                        <li>Subnet + parent interface are saved in metadata so reinstalls reuse them.</li>
+                                    </ul>
+                                </div>
+
+                                <div class="ipc-card-inner">
+                                    <h5><i class="fas fa-shield-halved"></i> Notes</h5>
+                                    <div class="ipc-note info">
+                                        Public IP is optional at create time. You can also add or change it later from the VPS's <strong>Manage IP</strong> page, which uses the exact same backend.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </div><!-- /#ipc_section -->
+                    </div>
+                </div>
+
+                <!-- Auto-Expiration Settings -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-clock"></i>
+                            Auto-Expiration Settings
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="auto_suspend_enabled" style="width: auto; margin: 0;">
+                                Enable Auto-Suspend on Expiration
+                            </label>
+                            <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                                When enabled, VPS will automatically suspend after the specified number of days
+                            </small>
+                        </div>
+
+                        <div id="expiration-settings" style="display: none; margin-top: 1rem;">
+                            <div class="grid grid-2">
+                                <div class="form-group">
+                                    <label class="form-label">Expiration Days</label>
+                                    <input type="number" id="expiration_days" class="form-control" value="30" min="1" max="365">
+                                    <small style="color: var(--text-muted);">Number of days until VPS expires</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Expiration Date (Preview)</label>
+                                    <input type="text" id="expiration_preview" class="form-control" readonly style="background-color: var(--bg-tertiary);">
+                                    <small style="color: var(--text-muted);">Calculated expiration date</small>
+                                </div>
+                            </div>
+
+                            <div style="padding: 0.75rem; background-color: var(--bg-tertiary); border-radius: var(--border-radius-sm); border-left: 3px solid var(--accent-warning);">
+                                <div style="display: flex; align-items: start; gap: 0.5rem;">
+                                    <i class="fas fa-info-circle" style="color: var(--accent-warning); margin-top: 0.25rem;"></i>
+                                    <div>
+                                        <strong>How Auto-Expiration Works:</strong>
+                                        <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+                                            <li>VPS will be automatically suspended after the specified days</li>
+                                            <li>User receives warning notification 3 days before expiration</li>
+                                            <li>Admin can renew VPS at any time to extend the expiration date</li>
+                                            <li>Suspended VPS can be unsuspended and renewed by admin</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resource Summary -->
+                <div class="card" style="margin: 1.5rem 0;">
+                    <div class="card-header">
+                        <h4 style="margin: 0;">Resource Summary</h4>
+                    </div>
+                    <div class="card-body">
+                        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                            <div>
+                                <span style="color: var(--text-muted);">Total CPU:</span>
+                                <span id="summary-cpu">2 cores</span>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-muted);">Total RAM:</span>
+                                <span id="summary-ram">2 GB</span>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-muted);">Total Storage:</span>
+                                <span id="summary-disk">20 GB</span>
+                            </div>
+                            <div>
+                                <span style="color: var(--text-muted);">Swap Memory:</span>
+                                <span>DISABLED</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <a href="{{ url_for('admin_vps') }}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create VPS
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Update summary
+    document.getElementById('cpu').addEventListener('input', function(e) {
+        document.getElementById('summary-cpu').textContent = e.target.value + ' cores';
+    });
+
+    document.getElementById('ram').addEventListener('input', function(e) {
+        document.getElementById('summary-ram').textContent = e.target.value + ' GB';
+    });
+
+    document.getElementById('disk').addEventListener('input', function(e) {
+        document.getElementById('summary-disk').textContent = e.target.value + ' GB';
+    });
+
+    // Swap is permanently disabled - no event handler needed
+
+    // Toggle expiration settings
+    document.getElementById('auto_suspend_enabled').addEventListener('change', function(e) {
+        const expirationSettings = document.getElementById('expiration-settings');
+        if (e.target.checked) {
+            expirationSettings.style.display = 'block';
+            updateExpirationPreview();
+        } else {
+            expirationSettings.style.display = 'none';
+        }
+    });
+
+    // Check node health when node is selected
+    document.getElementById('node_id').addEventListener('change', function(e) {
+        const nodeId = e.target.value;
+        const healthStatus = document.getElementById('node-health-status');
+        
+        if (nodeId) {
+            checkNodeHealth(nodeId);
+        } else {
+            healthStatus.style.display = 'none';
+        }
+    });
+
+    // Function to check node health
+    async function checkNodeHealth(nodeId) {
+        const healthStatus = document.getElementById('node-health-status');
+        
+        try {
+            const response = await fetch('/api/nodes/health');
+            const data = await response.json();
+            
+            if (data.success) {
+                const node = data.nodes.find(n => n.id == nodeId);
+                if (node) {
+                    if (!node.is_available) {
+                        healthStatus.innerHTML = `
+                            <div style="padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; color: var(--accent-danger);">
+                                <i class="fas fa-exclamation-triangle"></i> 
+                                <strong>Node Unavailable:</strong> ${node.message}
+                                ${node.retry_in_seconds > 0 ? ` (Retry in ${node.retry_in_seconds}s)` : ''}
+                            </div>
+                        `;
+                        healthStatus.style.display = 'block';
+                    } else if (node.health_status === 'degraded') {
+                        healthStatus.innerHTML = `
+                            <div style="padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 4px; color: var(--accent-warning);">
+                                <i class="fas fa-exclamation-circle"></i> 
+                                <strong>Node Degraded:</strong> ${node.message}
+                            </div>
+                        `;
+                        healthStatus.style.display = 'block';
+                    } else {
+                        healthStatus.innerHTML = `
+                            <div style="padding: 0.5rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 4px; color: var(--accent-success);">
+                                <i class="fas fa-check-circle"></i> 
+                                <strong>Node Healthy:</strong> Ready for VPS creation
+                            </div>
+                        `;
+                        healthStatus.style.display = 'block';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking node health:', error);
+        }
+    }
+
+    // Update expiration preview
+    function updateExpirationPreview() {
+        const days = parseInt(document.getElementById('expiration_days').value) || 30;
+        const now = new Date();
+        const expirationDate = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
+        
+        const formatted = expirationDate.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        document.getElementById('expiration_preview').value = formatted + ` (${days} days from now)`;
+    }
+
+    document.getElementById('expiration_days').addEventListener('input', updateExpirationPreview);
+
+    // ---------------------------------------------------------------
+    //  Routed-IP live preview (mirrors /vps/<id>/ipconfig behaviour)
+    // ---------------------------------------------------------------
+    function ipcEscapeHtml(s) {
+        return (s || '').replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    }
+
+    function ipcSanitizeContainerName(name) {
+        // Same rules the backend enforces in admin_vps_create() so the
+        // preview matches what will actually be created.
+        return (name || '')
+            .toLowerCase()
+            .replace(/\s|_/g, '-')
+            .replace(/[^a-z0-9\-]/g, '');
+    }
+
+    function ipcReadForm() {
+        const ip      = (document.getElementById('ip_address').value || '').trim();
+        const subnet  = (document.getElementById('ip_subnet').value || '32').toString().trim().replace(/^\//, '');
+        const parent  = (document.getElementById('ip_parent_iface').value || 'eth0').trim();
+        let container = ipcSanitizeContainerName(document.getElementById('hostname').value);
+        if (!container) container = '<container>';
+        return { ip, subnet, parent, container };
+    }
+
+    function ipcUpdateContainerPreview() {
+        const sanitized = ipcSanitizeContainerName(document.getElementById('hostname').value);
+        const el = document.getElementById('ipc_container_preview');
+        if (sanitized) {
+            el.innerHTML = ipcEscapeHtml(sanitized);
+        } else {
+            el.innerHTML = '<span style="color: var(--text-muted);">auto-generated from owner + index</span>';
+        }
+    }
+
+    function ipcUpdateStatePill() {
+        const ip = (document.getElementById('ip_address').value || '').trim();
+        const pill = document.getElementById('ipc_current_state');
+        if (ip) {
+            pill.textContent = 'will be configured: ' + ip;
+            pill.className = 'ipc-pill ok';
+        } else {
+            pill.textContent = 'none (no public IP at install)';
+            pill.className = 'ipc-pill muted';
+        }
+    }
+
+    function ipcUpdatePreview() {
+        ipcUpdateContainerPreview();
+        ipcUpdateStatePill();
+
+        const f = ipcReadForm();
+        const cmdEl = document.getElementById('ipc_cmdPreview');
+
+        if (!f.ip) {
+            cmdEl.innerHTML =
+                '<span style="color: var(--text-muted);"># No public IP set — the VPS will be installed without a routed public IP.\n'
+                + '# You can attach one later from the VPS\'s "Manage IP" page.</span>';
+            return;
+        }
+
+        // Basic IPv4 sanity check just for the preview text. The
+        // real validation happens server-side on submit.
+        const ipOk = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(f.ip);
+        const ipShown = ipOk ? f.ip : (f.ip + '  # ← not a valid IPv4');
+
+        cmdEl.innerHTML =
+            '<span class="h"># 1) Add IP/subnet to host parent interface</span>\n' +
+            'ip addr add <span class="ip-ok">' + ipcEscapeHtml(ipShown) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent) + '\n\n' +
+            '<span class="h"># 2) Attach routed NIC to container (creates eth1 inside)</span>\n' +
+            '<span class="lxc">lxc</span> config device add ' + ipcEscapeHtml(f.container) + ' pubip nic nictype=routed parent=' + ipcEscapeHtml(f.parent) + ' ipv4.address=<span class="ip-ok">' + ipcEscapeHtml(f.ip) + '</span> name=eth1\n\n' +
+            '<span class="h"># 3) Restart container so the new NIC is visible inside</span>\n' +
+            '<span class="lxc">lxc</span> restart ' + ipcEscapeHtml(f.container) + '\n\n' +
+            '<span class="h"># 4) Remove IP from host parent interface (now routed to container)</span>\n' +
+            'ip addr del <span class="ip-ok">' + ipcEscapeHtml(f.ip) + '/' + ipcEscapeHtml(f.subnet) + '</span> dev ' + ipcEscapeHtml(f.parent);
+    }
+
+    ['ip_address', 'ip_subnet', 'ip_parent_iface', 'hostname'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', ipcUpdatePreview);
+    });
+
+    // Master toggle for the entire IP-config section.
+    // When unchecked:
+    //   * The form fields are disabled (greyed out, not focusable).
+    //   * The whole section is hidden so the page is cleaner.
+    //   * The submit handler skips IP entirely (sends null/null).
+    function ipcApplyToggleState() {
+        const on = document.getElementById('ipc_configure').checked;
+        const section = document.getElementById('ipc_section');
+        section.style.display = on ? '' : 'none';
+        ['ip_address', 'ip_subnet', 'ip_parent_iface', 'ip_alias'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !on;
+        });
+        if (on) {
+            ipcUpdatePreview();
+        }
+    }
+    document.getElementById('ipc_configure').addEventListener('change', ipcApplyToggleState);
+    ipcApplyToggleState();
+
+    // Form submission
+    document.getElementById('createVPSForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const user_id = document.getElementById('user_id').value;
+        const node_id = document.getElementById('node_id').value;
+        const hostname = document.getElementById('hostname').value;
+        const os_version = document.getElementById('os_version').value;
+        const cpu = document.getElementById('cpu').value;
+        const ram = document.getElementById('ram').value;
+        const disk = document.getElementById('disk').value;
+        // Swap is permanently disabled - always 0
+        const kvm_enabled = document.getElementById('kvm_enabled').checked;
+        // Master IP-config toggle. When OFF, we ship `null` for every
+        // routed-IP field so the backend installs the VPS with no
+        // public IP and no metadata side-effects.
+        const ipc_configure = document.getElementById('ipc_configure').checked;
+        const ip_address = ipc_configure ? document.getElementById('ip_address').value.trim() : '';
+        const ip_alias = ipc_configure ? document.getElementById('ip_alias').value : '';
+        const ip_subnet_raw = ipc_configure
+            ? (document.getElementById('ip_subnet').value || '32').toString().trim().replace(/^\//, '')
+            : '';
+        const ip_parent_iface = ipc_configure
+            ? (document.getElementById('ip_parent_iface').value || '').trim()
+            : '';
+        const auto_suspend_enabled = document.getElementById('auto_suspend_enabled').checked;
+        const expiration_days = auto_suspend_enabled ? parseInt(document.getElementById('expiration_days').value) : 0;
+        const bandwidth_quota_gb = parseInt(document.getElementById('bandwidth_quota_gb').value) || 0;
+        const snapshot_limit = parseInt(document.getElementById('snapshot_limit').value) || 5;
+
+        if (!user_id || !node_id || !os_version) {
+            showToast('Please fill in all required fields', 'warning');
+            return;
+        }
+
+        if (auto_suspend_enabled && (!expiration_days || expiration_days < 1)) {
+            showToast('Please enter a valid expiration period (minimum 1 day)', 'warning');
+            return;
+        }
+
+        // Local-side IP validation so we don't ship junk to the server.
+        if (ip_address) {
+            const ipOk = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip_address);
+            if (!ipOk) {
+                showToast('Please enter a valid IPv4 address (or leave it blank).', 'warning');
+                return;
+            }
+            const sn = parseInt(ip_subnet_raw, 10);
+            if (isNaN(sn) || sn < 0 || sn > 32) {
+                showToast('Subnet must be between 0 and 32.', 'warning');
+                return;
+            }
+            if (ip_parent_iface && !/^[A-Za-z0-9._:\-]{1,32}$/.test(ip_parent_iface)) {
+                showToast('Invalid parent interface name.', 'warning');
+                return;
+            }
+        }
+
+        showLoading();
+        
+        // Show progress message
+        showToast('Creating VPS... This may take up to 3 minutes for remote nodes.', 'info');
+
+        try {
+            const response = await fetch('/admin/vps/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: parseInt(user_id),
+                    node_id: parseInt(node_id),
+                    hostname: hostname,
+                    os_version: os_version,
+                    cpu: parseInt(cpu),
+                    ram: parseInt(ram),
+                    disk: parseInt(disk),
+                    swap: 0,  // Permanently disabled
+                    kvm_enabled: kvm_enabled,
+                    ip_address: ip_address || null,
+                    ip_alias: ip_alias || null,
+                    // Only send routed-IP details when an IP was provided.
+                    // Backend ignores them otherwise.
+                    subnet: ip_address ? ip_subnet_raw : null,
+                    parent_iface: ip_address ? (ip_parent_iface || null) : null,
+                    auto_suspend_enabled: auto_suspend_enabled,
+                    expiration_days: expiration_days,
+                    bandwidth_quota_gb: bandwidth_quota_gb,
+                    snapshot_limit: snapshot_limit
+                }),
+                // Increase timeout for VPS creation
+                signal: AbortSignal.timeout(240000) // 4 minutes timeout
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('VPS installation started!', 'success');
+                // Redirect to installation progress page
+                setTimeout(() => {
+                    window.location.href = `/vps/${result.vps_id}/installing`;
+                }, 1000);
+            } else {
+                showToast(result.error || 'Failed to create VPS', 'danger');
+            }
+        } catch (error) {
+            console.error('Create VPS error:', error);
+            if (error.name === 'TimeoutError') {
+                showToast('VPS creation timed out. This may be due to remote node issues. Please check the VPS list to see if it was created successfully.', 'warning');
+            } else if (error.message.includes('timeout')) {
+                showToast('Request timed out. VPS creation may still be in progress. Please check the VPS list.', 'warning');
+            } else {
+                showToast('Network error: ' + error.message, 'danger');
+            }
+        } finally {
+            hideLoading();
+        }
+    });
+</script>
+{% endblock %}

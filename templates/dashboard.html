@@ -1,0 +1,1291 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ panel_name }}{% endblock %}
+
+{% block header_title %}Dashboard{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Home</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Dashboard</span>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ==========================================================================
+   DASHBOARD — REFRESHED LAYOUT
+   Uses base.html CSS variables so it follows the user's theme automatically.
+   ========================================================================== */
+
+.dash {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    animation: dashIn 0.4s ease-out;
+}
+
+@keyframes dashIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Welcome strip ---------- */
+.welcome-strip {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem 1.75rem;
+    background: var(--gradient-primary);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    box-shadow: 0 12px 32px -16px rgba(0,0,0,0.45);
+}
+
+.welcome-strip::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(900px circle at 100% -20%, rgba(255,255,255,0.18), transparent 50%),
+        radial-gradient(600px circle at 0% 120%,  rgba(0,0,0,0.18),  transparent 50%);
+    pointer-events: none;
+}
+
+.welcome-text {
+    position: relative;
+    min-width: 0;
+    flex: 1;
+}
+
+.welcome-greet {
+    font-size: 0.85rem;
+    font-weight: 500;
+    opacity: 0.9;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.welcome-name {
+    font-size: clamp(1.4rem, 2.4vw, 2rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin-top: 0.25rem;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+
+.welcome-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-top: 0.85rem;
+    font-size: 0.85rem;
+}
+
+.welcome-meta i { opacity: 0.85; margin-right: 0.4rem; }
+
+.health-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    background: rgba(255,255,255,0.18);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.25);
+}
+.health-pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.25);
+}
+.health-pill.warn .dot { background: #fbbf24; box-shadow: 0 0 0 4px rgba(251,191,36,0.25); }
+.health-pill.bad  .dot { background: #f87171; box-shadow: 0 0 0 4px rgba(248,113,113,0.25); }
+
+.welcome-actions {
+    position: relative;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.welcome-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.88rem;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease;
+    white-space: nowrap;
+}
+.welcome-btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.26); color: #fff; }
+.welcome-btn.solid { background: #fff; color: #1a1f2c; border-color: #fff; }
+.welcome-btn.solid:hover { background: #f4f6fa; color: #1a1f2c; }
+
+/* ---------- Stat cards ---------- */
+.stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    --accent: var(--accent-primary);
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.stat-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow: 0 12px 30px -16px rgba(0,0,0,0.35);
+}
+.stat-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--accent);
+}
+
+.stat-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.stat-card-icon {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    font-size: 1rem;
+}
+.stat-card-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.stat-card-value {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+}
+.stat-card-value .unit {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.stat-card-foot {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.4rem;
+}
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+.chip i { font-size: 0.7rem; }
+.chip.success { background: color-mix(in srgb, var(--accent-success) 14%, transparent); color: var(--accent-success); border-color: color-mix(in srgb, var(--accent-success) 30%, transparent); }
+.chip.warning { background: color-mix(in srgb, var(--accent-warning) 14%, transparent); color: var(--accent-warning); border-color: color-mix(in srgb, var(--accent-warning) 30%, transparent); }
+.chip.danger  { background: color-mix(in srgb, var(--accent-danger)  14%, transparent); color: var(--accent-danger);  border-color: color-mix(in srgb, var(--accent-danger)  30%, transparent); }
+
+/* ---------- Insights row (status doughnut + resource rings) ---------- */
+.insights {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) 1.4fr;
+    gap: 1rem;
+}
+@media (max-width: 980px) { .insights { grid-template-columns: 1fr; } }
+
+.panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1.25rem;
+}
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+}
+.panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+.panel-title i { color: var(--accent-primary); }
+.panel-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-decoration: none;
+    padding: 0.35rem 0.7rem;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+}
+.panel-link:hover { background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
+
+.status-chart-wrap {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 1rem;
+    align-items: center;
+}
+@media (max-width: 520px) { .status-chart-wrap { grid-template-columns: 1fr; } }
+
+.chart-area {
+    position: relative;
+    height: 180px;
+}
+.chart-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    text-align: center;
+}
+.chart-center .big {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+.chart-center .small {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+}
+.legend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+.legend-row .swatch {
+    width: 12px; height: 12px; border-radius: 4px;
+    flex-shrink: 0;
+}
+.legend-row .count {
+    margin-left: auto;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Resource rings */
+.ring-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+.ring-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: center;
+}
+.ring-svg { width: 110px; height: 110px; }
+.ring-track  { stroke: var(--bg-elevated); }
+.ring-fill   { transition: stroke-dashoffset 0.6s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.ring-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.ring-value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+.ring-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ---------- VPS table ---------- */
+.vps-panel { padding: 0; overflow: hidden; }
+.vps-panel .panel-head { padding: 1rem 1.25rem; margin-bottom: 0; }
+
+.vps-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.vps-table thead th {
+    text-align: left;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 700;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+.vps-table tbody td {
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+.vps-table tbody tr:last-child td { border-bottom: none; }
+.vps-table tbody tr { transition: background 0.15s ease; }
+.vps-table tbody tr:hover { background: var(--hover-bg); }
+
+.vps-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+.vps-os {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    color: var(--accent-primary);
+    font-size: 1.05rem;
+    flex-shrink: 0;
+}
+.vps-meta { min-width: 0; }
+.vps-name {
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vps-name .star { color: #fbbf24; font-size: 0.75rem; }
+.vps-sub {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.status-pill.running    { color: var(--accent-success); background: color-mix(in srgb, var(--accent-success) 14%, transparent); border-color: color-mix(in srgb, var(--accent-success) 30%, transparent); }
+.status-pill.running .dot { background: var(--accent-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-success) 25%, transparent); }
+.status-pill.stopped    { color: var(--text-muted); }
+.status-pill.suspended  { color: var(--accent-warning); background: color-mix(in srgb, var(--accent-warning) 14%, transparent); border-color: color-mix(in srgb, var(--accent-warning) 30%, transparent); }
+.status-pill.suspended .dot { background: var(--accent-warning); }
+.status-pill.installing,
+.status-pill.transferring,
+.status-pill.reinstalling { color: var(--accent-info, var(--accent-primary)); background: color-mix(in srgb, var(--accent-primary) 14%, transparent); border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent); }
+.status-pill.installing .dot,
+.status-pill.transferring .dot,
+.status-pill.reinstalling .dot { background: var(--accent-primary); animation: dashPulse 1.2s ease-in-out infinite; }
+.status-pill.missing,
+.status-pill.error,
+.status-pill.unknown { color: var(--accent-danger, #ef4444); background: color-mix(in srgb, var(--accent-danger, #ef4444) 14%, transparent); border-color: color-mix(in srgb, var(--accent-danger, #ef4444) 30%, transparent); }
+.status-pill.missing .dot,
+.status-pill.error .dot,
+.status-pill.unknown .dot { background: var(--accent-danger, #ef4444); }
+@keyframes dashPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.res-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 140px;
+}
+.res-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+.res-line i { width: 14px; color: var(--text-muted); }
+.res-line .res-label { color: var(--text-muted); flex-shrink: 0; }
+.res-line .res-bar {
+    position: relative;
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    overflow: hidden;
+    min-width: 50px;
+}
+.res-line .res-bar > span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--accent-primary);
+    transition: width 0.5s ease, background-color 0.3s ease;
+}
+.res-line.cpu  .res-bar > span { background: var(--accent-primary); }
+.res-line.ram  .res-bar > span { background: var(--accent-success); }
+.res-line.disk .res-bar > span { background: var(--accent-warning); }
+.res-line.disk .res-bar > span.high   { background: var(--accent-danger, #ef4444); }
+.res-line.cpu  .res-bar > span.high,
+.res-line.ram  .res-bar > span.high   { background: var(--accent-danger, #ef4444); }
+.res-line .res-val {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 42px;
+    text-align: right;
+    font-size: 0.78rem;
+}
+.res-alloc {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+.res-alloc span { display: inline-flex; align-items: center; gap: 0.25rem; }
+
+.ip-mono {
+    font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 0.25rem 0.55rem;
+    border-radius: 8px;
+    display: inline-block;
+}
+.ip-mono.none { color: var(--text-muted); background: transparent; border-style: dashed; }
+
+.row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.row-btn {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+.row-btn:hover { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); transform: translateY(-1px); }
+
+/* Empty state */
+.empty {
+    padding: 3rem 1.5rem;
+    text-align: center;
+}
+.empty .empty-ico {
+    width: 70px; height: 70px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+    color: var(--accent-primary);
+    display: grid; place-items: center;
+    font-size: 1.5rem;
+}
+.empty h3 { margin-bottom: 0.4rem; color: var(--text-primary); }
+.empty p { color: var(--text-muted); margin-bottom: 1rem; }
+
+/* ---------- Notifications list ---------- */
+.notif-list { display: flex; flex-direction: column; }
+.notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s ease;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--hover-bg); }
+.notif-ico {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    display: grid; place-items: center;
+    font-size: 0.95rem;
+}
+.notif-ico.success { background: color-mix(in srgb, var(--accent-success) 16%, transparent); color: var(--accent-success); }
+.notif-ico.warning { background: color-mix(in srgb, var(--accent-warning) 16%, transparent); color: var(--accent-warning); }
+.notif-ico.danger  { background: color-mix(in srgb, var(--accent-danger)  16%, transparent); color: var(--accent-danger); }
+.notif-ico.info    { background: color-mix(in srgb, var(--accent-primary) 16%, transparent); color: var(--accent-primary); }
+.notif-body { min-width: 0; flex: 1; }
+.notif-title { font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem; }
+.notif-msg { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.25rem; }
+.notif-time { font-size: 0.72rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.3rem; }
+
+/* ---------- Node cards (admin) ---------- */
+.node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    padding: 1.25rem;
+}
+.node-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.node-card:hover { transform: translateY(-2px); border-color: var(--accent-primary); }
+.node-top {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.node-ico {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+.node-ico.online  { background: color-mix(in srgb, var(--accent-success) 16%, transparent); color: var(--accent-success); }
+.node-ico.offline { background: color-mix(in srgb, var(--accent-danger)  16%, transparent); color: var(--accent-danger); }
+.node-info { min-width: 0; flex: 1; }
+.node-info h4 {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.node-info .loc { font-size: 0.78rem; color: var(--text-muted); }
+.node-cap-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    overflow: hidden;
+}
+.node-cap-bar > span {
+    display: block; height: 100%;
+    background: var(--gradient-primary);
+    border-radius: 4px;
+}
+.node-cap-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.node-cap-text strong { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .welcome-strip { flex-direction: column; align-items: stretch; }
+    .welcome-actions { justify-content: flex-start; }
+
+    .vps-table thead { display: none; }
+    .vps-table tbody tr {
+        display: block;
+        padding: 0.85rem 1.25rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .vps-table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.4rem 0;
+        border: none;
+    }
+    .vps-table tbody td::before {
+        content: attr(data-label);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+    .vps-cell { justify-content: flex-end; }
+    .row-actions { justify-content: flex-end; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{# Time-aware greeting #}
+{% set _hr = (now().hour if now else 12) %}
+{% set _greeting = 'Good morning' if _hr < 12 else ('Good afternoon' if _hr < 18 else 'Good evening') %}
+
+{# Health pill class #}
+{% set _health_state = 'ok' %}
+{% if suspended_count > 0 %}{% set _health_state = 'warn' %}{% endif %}
+{% if vps_count > 0 and running_count == 0 %}{% set _health_state = 'bad' %}{% endif %}
+
+<div class="dash">
+
+    <!-- ============ WELCOME STRIP ============ -->
+    <div class="welcome-strip">
+        <div class="welcome-text">
+            <div class="welcome-greet">{{ _greeting }}</div>
+            <div class="welcome-name">{{ current_user.username }}</div>
+            <div class="welcome-meta">
+                <span class="health-pill {% if _health_state == 'warn' %}warn{% elif _health_state == 'bad' %}bad{% endif %}">
+                    <span class="dot"></span>
+                    {% if vps_count == 0 %}
+                        No servers yet
+                    {% elif _health_state == 'bad' %}
+                        All servers offline
+                    {% elif _health_state == 'warn' %}
+                        {{ suspended_count }} suspended
+                    {% else %}
+                        All systems normal
+                    {% endif %}
+                </span>
+                {% if current_user.last_login %}
+                <span><i class="fas fa-clock"></i>Last login {{ current_user.last_login|relative_time }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="welcome-actions">
+            <a href="{{ url_for('vps_list') }}" class="welcome-btn solid">
+                <i class="fas fa-server"></i><span>Manage VPS</span>
+            </a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin_vps_create') }}" class="welcome-btn">
+                <i class="fas fa-plus-circle"></i><span>New VPS</span>
+            </a>
+            <a href="{{ url_for('admin_dashboard') }}" class="welcome-btn">
+                <i class="fas fa-crown"></i><span>Admin</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============ STAT CARDS ============ -->
+    <div class="stat-row">
+        <div class="stat-card" style="--accent: var(--accent-primary);">
+            <div class="stat-card-head">
+                <div class="stat-card-icon"><i class="fas fa-server"></i></div>
+                <span class="chip"><i class="fas fa-layer-group"></i>Servers</span>
+            </div>
+            <div class="stat-card-label">Total VPS</div>
+            <div class="stat-card-value" id="statTotalVps">{{ vps_count }}</div>
+            <div class="stat-card-foot">
+                <span class="chip success"><i class="fas fa-circle"></i><span id="statRunning">{{ running_count }}</span> running</span>
+                {% if suspended_count > 0 %}
+                <span class="chip warning"><i class="fas fa-pause-circle"></i><span id="statSuspended">{{ suspended_count }}</span> suspended</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="stat-card" style="--accent: var(--accent-success);">
+            <div class="stat-card-head">
+                <div class="stat-card-icon"><i class="fas fa-microchip"></i></div>
+                <span class="chip"><i class="fas fa-bolt"></i>Cores</span>
+            </div>
+            <div class="stat-card-label">CPU Allocated</div>
+            <div class="stat-card-value">{{ total_cpu }}<span class="unit">vCPU</span></div>
+            <div class="stat-card-foot">
+                <span class="chip"><i class="fas fa-tachometer-alt"></i>Across {{ vps_count }} VPS</span>
+            </div>
+        </div>
+
+        <div class="stat-card" style="--accent: #4facfe;">
+            <div class="stat-card-head">
+                <div class="stat-card-icon"><i class="fas fa-memory"></i></div>
+                <span class="chip"><i class="fas fa-database"></i>Memory</span>
+            </div>
+            <div class="stat-card-label">RAM Allocated</div>
+            <div class="stat-card-value">{{ total_ram }}<span class="unit">GB</span></div>
+            <div class="stat-card-foot">
+                <span class="chip"><i class="fas fa-chart-line"></i>Reserved</span>
+            </div>
+        </div>
+
+        <div class="stat-card" style="--accent: var(--accent-warning);">
+            <div class="stat-card-head">
+                <div class="stat-card-icon"><i class="fas fa-hdd"></i></div>
+                <span class="chip"><i class="fas fa-folder-tree"></i>Storage</span>
+            </div>
+            <div class="stat-card-label">Disk Allocated</div>
+            <div class="stat-card-value">{{ total_disk }}<span class="unit">GB</span></div>
+            <div class="stat-card-foot">
+                <span class="chip"><i class="fas fa-chart-pie"></i>Provisioned</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ INSIGHTS ROW ============ -->
+    <div class="insights">
+        <!-- Status doughnut -->
+        <div class="panel">
+            <div class="panel-head">
+                <div class="panel-title"><i class="fas fa-chart-pie"></i>VPS Status</div>
+            </div>
+
+            {% if vps_count > 0 %}
+            <div class="status-chart-wrap">
+                <div class="chart-area">
+                    <canvas id="statusChart"></canvas>
+                    <div class="chart-center">
+                        <div class="big" id="chartCenterTotal">{{ vps_count }}</div>
+                        <div class="small">Total VPS</div>
+                    </div>
+                </div>
+                <div class="legend-list">
+                    <div class="legend-row">
+                        <span class="swatch" style="background:#10b981;"></span>
+                        <span>Running</span>
+                        <span class="count" id="legendRunning">{{ running_count }}</span>
+                    </div>
+                    <div class="legend-row">
+                        <span class="swatch" style="background:#6b7280;"></span>
+                        <span>Stopped</span>
+                        <span class="count" id="legendStopped">{{ stopped_count }}</span>
+                    </div>
+                    <div class="legend-row">
+                        <span class="swatch" style="background:#f59e0b;"></span>
+                        <span>Suspended</span>
+                        <span class="count" id="legendSuspended">{{ suspended_count }}</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty" style="padding: 2rem 1rem;">
+                <div class="empty-ico"><i class="fas fa-server"></i></div>
+                <p>No VPS to display yet.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Resource allocation rings -->
+        <div class="panel">
+            <div class="panel-head">
+                <div class="panel-title"><i class="fas fa-gauge-high"></i>Resource Allocation</div>
+                <span class="chip"><i class="fas fa-info-circle"></i>Sum across all VPS</span>
+            </div>
+            <div class="ring-grid">
+                <div class="ring-card">
+                    <svg class="ring-svg" viewBox="0 0 120 120">
+                        <circle class="ring-track" cx="60" cy="60" r="50" stroke-width="10" fill="none"/>
+                        <circle class="ring-fill" id="ringCpu"  cx="60" cy="60" r="50" stroke-width="10" fill="none"
+                                stroke="var(--accent-primary)" stroke-linecap="round"
+                                stroke-dasharray="314.159" stroke-dashoffset="314.159"/>
+                    </svg>
+                    <div class="ring-label">CPU</div>
+                    <div class="ring-value">{{ total_cpu }} vCPU</div>
+                    <div class="ring-sub">across {{ vps_count }} VPS</div>
+                </div>
+                <div class="ring-card">
+                    <svg class="ring-svg" viewBox="0 0 120 120">
+                        <circle class="ring-track" cx="60" cy="60" r="50" stroke-width="10" fill="none"/>
+                        <circle class="ring-fill" id="ringRam" cx="60" cy="60" r="50" stroke-width="10" fill="none"
+                                stroke="var(--accent-success)" stroke-linecap="round"
+                                stroke-dasharray="314.159" stroke-dashoffset="314.159"/>
+                    </svg>
+                    <div class="ring-label">Memory</div>
+                    <div class="ring-value">{{ total_ram }} GB</div>
+                    <div class="ring-sub">allocated</div>
+                </div>
+                <div class="ring-card">
+                    <svg class="ring-svg" viewBox="0 0 120 120">
+                        <circle class="ring-track" cx="60" cy="60" r="50" stroke-width="10" fill="none"/>
+                        <circle class="ring-fill" id="ringDisk" cx="60" cy="60" r="50" stroke-width="10" fill="none"
+                                stroke="var(--accent-warning)" stroke-linecap="round"
+                                stroke-dasharray="314.159" stroke-dashoffset="314.159"/>
+                    </svg>
+                    <div class="ring-label">Storage</div>
+                    <div class="ring-value">{{ total_disk }} GB</div>
+                    <div class="ring-sub">provisioned</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ VPS TABLE ============ -->
+    <div class="panel vps-panel">
+        <div class="panel-head">
+            <div class="panel-title"><i class="fas fa-server"></i>My Servers</div>
+            <a href="{{ url_for('vps_list') }}" class="panel-link">View all<i class="fas fa-arrow-right"></i></a>
+        </div>
+
+        {% if vps_list %}
+        <table class="vps-table">
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Status</th>
+                    <th>Resources</th>
+                    <th>IP Address</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vps in vps_list[:6] %}
+                {% set _icon = OS_ICONS.get(get_os_icon_name(vps.os_version), OS_ICONS['default']) %}
+                <tr data-vps-id="{{ vps.id }}">
+                    <td data-label="Server">
+                        <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="vps-cell" style="text-decoration:none; color:inherit;">
+                            <div class="vps-os"><i class="{{ _icon }}"></i></div>
+                            <div class="vps-meta">
+                                <div class="vps-name">
+                                    {{ vps.hostname or vps.container_name }}
+                                    {% if vps.whitelisted %}<i class="fas fa-star star" title="Whitelisted"></i>{% endif %}
+                                </div>
+                                <div class="vps-sub">#{{ vps.id }} · {{ get_os_label(vps.os_version) }}</div>
+                            </div>
+                        </a>
+                    </td>
+                    <td data-label="Status">
+                        {% set _ls = (vps.live_status or '')|lower %}
+                        {% if vps.suspended %}
+                            {% set _scls = 'suspended' %}{% set _slbl = 'Suspended' %}
+                        {% elif _ls == 'transferring' %}
+                            {% set _scls = 'transferring' %}{% set _slbl = 'Transferring' %}
+                        {% elif _ls == 'installing' %}
+                            {% set _scls = 'installing' %}{% set _slbl = 'Installing' %}
+                        {% elif _ls == 'reinstalling' %}
+                            {% set _scls = 'reinstalling' %}{% set _slbl = 'Reinstall' %}
+                        {% elif _ls == 'running' %}
+                            {% set _scls = 'running' %}{% set _slbl = 'Running' %}
+                        {% elif _ls == 'stopped' %}
+                            {% set _scls = 'stopped' %}{% set _slbl = 'Stopped' %}
+                        {% elif _ls == 'missing' %}
+                            {% set _scls = 'missing' %}{% set _slbl = 'Missing' %}
+                        {% elif _ls in ('error', 'timeout', 'connection_error', 'server_error', 'circuit_open') %}
+                            {% set _scls = 'error' %}{% set _slbl = 'Error' %}
+                        {% else %}
+                            {% set _scls = 'unknown' %}{% set _slbl = 'Unknown' %}
+                        {% endif %}
+                        <span class="status-pill {{ _scls }}">
+                            <span class="dot"></span>{{ _slbl }}
+                        </span>
+                    </td>
+                    <td data-label="Resources">
+                        <div class="res-stack">
+                            <div class="res-line cpu">
+                                <i class="fas fa-microchip"></i>
+                                <span class="res-label">CPU</span>
+                                <span class="res-bar"><span data-cpu-bar style="width:0%;"></span></span>
+                                <span class="res-val" data-cpu-val>0%</span>
+                            </div>
+                            <div class="res-line ram">
+                                <i class="fas fa-memory"></i>
+                                <span class="res-label">RAM</span>
+                                <span class="res-bar"><span data-ram-bar style="width:0%;"></span></span>
+                                <span class="res-val" data-ram-val>0%</span>
+                            </div>
+                            <div class="res-line disk">
+                                <i class="fas fa-hdd"></i>
+                                <span class="res-label">Disk</span>
+                                <span class="res-bar"><span data-disk-bar style="width:0%;"></span></span>
+                                <span class="res-val" data-disk-val>0%</span>
+                            </div>
+                            <div class="res-alloc">
+                                <span><i class="fas fa-microchip"></i>{{ vps.cpu }} vCPU</span>
+                                <span><i class="fas fa-memory"></i>{{ vps.ram }}</span>
+                                <span><i class="fas fa-hdd"></i>{{ vps.storage }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="IP Address">
+                        {% if vps.ip_alias %}
+                            <span class="ip-mono">{{ vps.ip_alias }}</span>
+                        {% elif vps.ip_address %}
+                            <span class="ip-mono">{{ vps.ip_address }}</span>
+                        {% else %}
+                            <span class="ip-mono none">Not assigned</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Actions">
+                        <div class="row-actions">
+                            <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="row-btn" title="Manage">
+                                <i class="fas fa-cog"></i>
+                            </a>
+                            {% if vps.live_status == 'running' and not vps.suspended %}
+                            <a href="{{ url_for('vps_console', vps_id=vps.id) }}" class="row-btn" title="Console">
+                                <i class="fas fa-terminal"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            <div class="empty-ico"><i class="fas fa-server"></i></div>
+            <h3>No servers yet</h3>
+            <p>You haven't created any virtual private servers.</p>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin_vps_create') }}" class="welcome-btn solid" style="background: var(--accent-primary); color:#fff; border-color: var(--accent-primary);">
+                <i class="fas fa-plus-circle"></i><span>Create your first VPS</span>
+            </a>
+            {% else %}
+            <p style="font-size: 0.85rem;">Contact an administrator to provision a VPS for you.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ============ NOTIFICATIONS ============ -->
+    {% if notifications %}
+    <div class="panel vps-panel">
+        <div class="panel-head">
+            <div class="panel-title"><i class="fas fa-bell"></i>Recent Notifications</div>
+            <a href="{{ url_for('notifications') }}" class="panel-link">View all<i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="notif-list">
+            {% for notif in notifications[:5] %}
+            <a href="{{ url_for('notifications') }}" class="notif-item">
+                <div class="notif-ico {{ notif.type }}">
+                    <i class="fas fa-{% if notif.type == 'success' %}check-circle{% elif notif.type == 'warning' %}exclamation-triangle{% elif notif.type == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                </div>
+                <div class="notif-body">
+                    <div class="notif-title">{{ notif.title }}</div>
+                    <div class="notif-msg">{{ notif.message }}</div>
+                    <div class="notif-time"><i class="fas fa-clock"></i>{{ notif.created_at|relative_time }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ============ NODE INFRASTRUCTURE (admin) ============ -->
+    {% if current_user.is_admin and node_status %}
+    <div class="panel vps-panel">
+        <div class="panel-head">
+            <div class="panel-title"><i class="fas fa-network-wired"></i>Node Infrastructure</div>
+            <a href="{{ url_for('admin_dashboard') }}" class="panel-link">Manage nodes<i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="node-grid">
+            {% for node in node_status %}
+            {% set _used = node.vps_count or 0 %}
+            {% set _total = (node.total_vps or 0) %}
+            {% set _pct = ((_used / _total) * 100) if _total else 0 %}
+            <div class="node-card">
+                <div class="node-top">
+                    <div class="node-ico {% if node.online %}online{% else %}offline{% endif %}">
+                        <i class="fas fa-{% if node.online %}check-circle{% else %}exclamation-circle{% endif %}"></i>
+                    </div>
+                    <div class="node-info">
+                        <h4>{{ node.name }}</h4>
+                        <div class="loc"><i class="fas fa-map-marker-alt"></i> {{ node.location or '—' }}</div>
+                    </div>
+                    <span class="chip {% if node.online %}success{% else %}danger{% endif %}">
+                        {% if node.online %}Online{% else %}Offline{% endif %}
+                    </span>
+                </div>
+                <div>
+                    <div class="node-cap-bar"><span style="width: {{ _pct|round(1) }}%;"></span></div>
+                    <div class="node-cap-text" style="margin-top: 0.45rem;">
+                        <span><strong>{{ _used }}</strong> / {{ _total }} VPS</span>
+                        <span>{{ _pct|round(0)|int }}% capacity</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // Chart instance and counts kept at module scope so the polling fn can update them.
+    let statusChart = null;
+    const RING_CIRCUMFERENCE = 2 * Math.PI * 50; // matches r=50 in SVG
+
+    /* ---------- Doughnut chart ---------- */
+    function initStatusChart() {
+        const el = document.getElementById('statusChart');
+        if (!el || typeof Chart === 'undefined') return;
+        const ctx = el.getContext('2d');
+
+        statusChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Running', 'Stopped', 'Suspended'],
+                datasets: [{
+                    data: [{{ running_count }}, {{ stopped_count }}, {{ suspended_count }}],
+                    backgroundColor: ['#10b981', '#6b7280', '#f59e0b'],
+                    borderWidth: 0,
+                    hoverOffset: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '72%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,17,22,0.92)',
+                        padding: 10,
+                        cornerRadius: 8,
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 12 },
+                    }
+                }
+            }
+        });
+    }
+
+    /* ---------- Resource rings ---------- */
+    function setRing(id, percent) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const p = Math.max(0, Math.min(100, percent || 0));
+        const offset = RING_CIRCUMFERENCE * (1 - p / 100);
+        el.style.strokeDashoffset = offset;
+    }
+
+    function initRings() {
+        // Initial state: CPU and RAM rings briefly show full as an "allocation"
+        // visual hint and are then overwritten with live utilization by loadStats().
+        // Disk ring must NOT start full — it represents live disk usage and the
+        // server template has no usage data to embed, so we start it at 0 and let
+        // loadStats() set the real value as soon as it arrives.
+        const cpu = {{ total_cpu }};
+        const ram = {{ total_ram }};
+        const disk = {{ total_disk }};
+
+        // Show full when any allocation exists, dim when empty.
+        setRing('ringCpu',  cpu  > 0 ? 100 : 0);
+        setRing('ringRam',  ram  > 0 ? 100 : 0);
+        // Disk: start empty so it doesn't read as "100% full" before live data arrives.
+        setRing('ringDisk', 0);
+    }
+
+    /* ---------- Status label mapper ---------- */
+    function mapStatusLabel(rawStatus) {
+        const s = (rawStatus || '').toString().toLowerCase().replace(/_cached$/, '');
+        if (s === 'suspended')    return { cls: 'suspended',    label: 'Suspended' };
+        if (s === 'running')      return { cls: 'running',      label: 'Running' };
+        if (s === 'stopped')      return { cls: 'stopped',      label: 'Stopped' };
+        if (s === 'installing')   return { cls: 'installing',   label: 'Installing' };
+        if (s === 'reinstalling') return { cls: 'reinstalling', label: 'Reinstall' };
+        if (s === 'transferring') return { cls: 'transferring', label: 'Transferring' };
+        if (s === 'missing')      return { cls: 'missing',      label: 'Missing' };
+        if (s === 'error' || s === 'timeout' || s === 'connection_error' || s === 'server_error' || s === 'circuit_open') {
+            return { cls: 'error', label: 'Connection Issue' };
+        }
+        return { cls: 'unknown', label: 'Unknown' };
+    }
+
+    /* ---------- Live stats poller ---------- */
+    async function loadStats() {
+        try {
+            const res = await fetch('/dashboard/stats', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.success || !data.stats) return;
+
+            let running = 0, stopped = 0, suspended = 0;
+            let cpuSumPct = 0, ramSumPct = 0, sampled = 0;
+            let diskSumPct = 0, diskSampled = 0;
+
+            Object.entries(data.stats).forEach(([vpsId, stats]) => {
+                const row = document.querySelector('[data-vps-id="' + vpsId + '"]');
+
+                // Status pill
+                if (row) {
+                    const pill = row.querySelector('.status-pill');
+                    if (pill) {
+                        pill.classList.remove('running','stopped','suspended','installing',
+                            'reinstalling','transferring','missing','error','unknown');
+                        const mapped = mapStatusLabel(stats.status);
+                        pill.classList.add(mapped.cls);
+                        pill.innerHTML = '<span class="dot"></span>' + mapped.label;
+                    }
+
+                    // Live resource bars
+                    if (stats.cpu !== undefined) {
+                        const cpuPct = Math.max(0, Math.min(100, Number(stats.cpu) || 0));
+                        const bar = row.querySelector('[data-cpu-bar]');
+                        const val = row.querySelector('[data-cpu-val]');
+                        if (bar) { bar.style.width = cpuPct + '%'; bar.classList.toggle('high', cpuPct > 85); }
+                        if (val) val.textContent = cpuPct.toFixed(0) + '%';
+                    }
+                    if (stats.ram && stats.ram.pct !== undefined) {
+                        const ramPct = Math.max(0, Math.min(100, Number(stats.ram.pct) || 0));
+                        const bar = row.querySelector('[data-ram-bar]');
+                        const val = row.querySelector('[data-ram-val]');
+                        if (bar) { bar.style.width = ramPct + '%'; bar.classList.toggle('high', ramPct > 85); }
+                        if (val) val.textContent = ramPct.toFixed(0) + '%';
+                    }
+                    // Disk: prefer stats.disk.pct, fall back to parsing "85%" from use_percent
+                    let diskPctRaw;
+                    if (stats.disk) {
+                        if (stats.disk.pct !== undefined && stats.disk.pct !== null) {
+                            diskPctRaw = Number(stats.disk.pct);
+                        } else if (typeof stats.disk.use_percent === 'string') {
+                            const m = stats.disk.use_percent.match(/(\d+(?:\.\d+)?)/);
+                            if (m) diskPctRaw = parseFloat(m[1]);
+                        }
+                    }
+                    if (diskPctRaw !== undefined && !Number.isNaN(diskPctRaw)) {
+                        const diskPct = Math.max(0, Math.min(100, diskPctRaw));
+                        const bar = row.querySelector('[data-disk-bar]');
+                        const val = row.querySelector('[data-disk-val]');
+                        if (bar) { bar.style.width = diskPct + '%'; bar.classList.toggle('high', diskPct > 85); }
+                        if (val) val.textContent = diskPct.toFixed(0) + '%';
+                    }
+                }
+
+                // Tally
+                const norm = (stats.status || '').toString().toLowerCase().replace(/_cached$/, '');
+                if (norm === 'suspended') suspended++;
+                else if (norm === 'running') {
+                    running++;
+                    if (stats.cpu !== undefined) cpuSumPct += Number(stats.cpu) || 0;
+                    if (stats.ram && stats.ram.pct !== undefined) ramSumPct += Number(stats.ram.pct) || 0;
+                    sampled++;
+                    // Disk: prefer stats.disk.pct, fall back to parsing use_percent ("85%")
+                    let dPct;
+                    if (stats.disk) {
+                        if (stats.disk.pct !== undefined && stats.disk.pct !== null) {
+                            dPct = Number(stats.disk.pct);
+                        } else if (typeof stats.disk.use_percent === 'string') {
+                            const m = stats.disk.use_percent.match(/(\d+(?:\.\d+)?)/);
+                            if (m) dPct = parseFloat(m[1]);
+                        }
+                    }
+                    if (dPct !== undefined && !Number.isNaN(dPct)) {
+                        diskSumPct += dPct;
+                        diskSampled++;
+                    }
+                } else stopped++;
+            });
+
+            // Update stat-card numbers
+            const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            setText('statRunning', running);
+            setText('statSuspended', suspended);
+
+            // Update doughnut + center label + legend counts
+            setText('legendRunning', running);
+            setText('legendStopped', stopped);
+            setText('legendSuspended', suspended);
+            setText('chartCenterTotal', running + stopped + suspended);
+
+            if (statusChart) {
+                const cur = statusChart.data.datasets[0].data;
+                if (cur[0] !== running || cur[1] !== stopped || cur[2] !== suspended) {
+                    statusChart.data.datasets[0].data = [running, stopped, suspended];
+                    statusChart.update('none');
+                }
+            }
+
+            // Update rings to reflect average live usage among running VPS.
+            if (sampled > 0) {
+                setRing('ringCpu', cpuSumPct / sampled);
+                setRing('ringRam', ramSumPct / sampled);
+            }
+            // Disk ring uses its own sample count (some agents may not report disk).
+            if (diskSampled > 0) {
+                setRing('ringDisk', diskSumPct / diskSampled);
+            } else if (sampled === 0) {
+                // No running VPS reporting at all — show empty ring instead of stuck-full.
+                setRing('ringDisk', 0);
+            }
+        } catch (e) {
+            // Silent — polling will retry.
+        }
+    }
+
+    /* ---------- Init ---------- */
+    document.addEventListener('DOMContentLoaded', function() {
+        initStatusChart();
+        initRings();
+        // First fetch fires straight away so users don't see 0% bars on load.
+        loadStats();
+        setInterval(loadStats, 10000);
+    });
+})();
+</script>
+{% endblock %}

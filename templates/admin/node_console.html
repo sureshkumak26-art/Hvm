@@ -1,0 +1,616 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ panel_name }} · Node Console · {{ node.name }}{% endblock %}
+{% block header_title %}Node Console · {{ node.name }}{% endblock %}
+
+{% block extra_css %}
+<!-- Xterm.js -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+<style>
+    /* ===== Local theme tokens for this page only ===== */
+    .node-console-page {
+        --bg-darker: #0c0e12;
+        --bg-elevated: #111316;
+        --border-color: rgba(255, 255, 255, 0.08);
+        --accent-red: #ef4444;
+        --accent-orange: #f97316;
+        --accent-cyan: #4facfe;
+        --accent-green: #34d399;
+        --accent-yellow: #fbbf24;
+        --text-primary: #e1e9f0;
+        --text-muted: #9ca3af;
+        --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+        color: var(--text-primary);
+        background: var(--bg-darker);
+        border-radius: 14px;
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        /* Fill the content area between header and footer. */
+        height: calc(100vh - var(--header-height) - 80px);
+        min-height: 480px;
+        position: relative;
+    }
+
+    /* On the console page, pull the .content padding tight so the terminal
+       feels full-width without losing the sidebar. */
+    body[data-console-page="node"] .content {
+        padding: 1rem;
+    }
+    body[data-console-page="node"] .footer {
+        display: none;
+    }
+
+    /* Top bar */
+    .node-console-page .console-topbar {
+        background: linear-gradient(135deg, rgba(17, 19, 22, 0.98) 0%, rgba(26, 28, 32, 0.98) 100%);
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+    }
+    .node-console-page .node-badge {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.15) 100%);
+        padding: 0.4rem 1rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .node-console-page .node-badge i { color: #ef4444; }
+    .node-console-page .node-badge .badge {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 0.15rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+    }
+    .node-console-page .warning-badge {
+        background: linear-gradient(135deg, rgba(249, 115, 22, 0.18) 0%, rgba(234, 88, 12, 0.18) 100%);
+        padding: 0.35rem 0.85rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        border: 1px solid rgba(249, 115, 22, 0.4);
+        color: var(--accent-orange);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .node-console-page .conn-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        background: rgba(17, 19, 22, 0.8);
+        padding: 0.4rem 1rem;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        font-size: 0.85rem;
+    }
+    .node-console-page .status-led {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: #6c757d; transition: all 0.3s ease;
+    }
+    .node-console-page .status-led.connected {
+        background: var(--accent-green);
+        box-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+        animation: pulse 2s ease-in-out infinite;
+    }
+    .node-console-page .status-led.disconnected { background: var(--accent-red); }
+    .node-console-page .status-led.connecting {
+        background: var(--accent-yellow);
+        animation: blink 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+    }
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+    .node-console-page .control-buttons { display: flex; gap: 0.4rem; flex-shrink: 0; }
+    .node-console-page .control-buttons .btn {
+        background: rgba(17, 19, 22, 0.8);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        border-radius: 8px;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.8rem;
+        transition: all 0.2s ease;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+    }
+    .node-console-page .control-buttons .btn:hover {
+        background: rgba(102, 126, 234, 0.2);
+        border-color: rgba(102, 126, 234, 0.5);
+    }
+    .node-console-page .control-buttons .btn-exit {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%);
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    /* Terminal */
+    .node-console-page #terminal-container {
+        flex: 1;
+        background: var(--bg-darker);
+        padding: 10px;
+        overflow: hidden;
+        position: relative;
+        min-height: 0;
+    }
+    .node-console-page .xterm {
+        height: 100%;
+        padding: 8px;
+        border-radius: 10px;
+        background: rgba(12, 14, 18, 0.85);
+        border: 1px solid var(--border-color);
+    }
+    .node-console-page .xterm-viewport {
+        overflow-y: auto !important;
+        scrollbar-width: thin;
+    }
+
+    /* Footer hints inside the console */
+    .node-console-page .console-footer {
+        background: linear-gradient(135deg, rgba(17, 19, 22, 0.98) 0%, rgba(26, 28, 32, 0.98) 100%);
+        border-top: 1px solid var(--border-color);
+        padding: 0.5rem 1.25rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+    }
+    .node-console-page .footer-hint {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .node-console-page .footer-hint i {
+        color: var(--accent-red); opacity: 0.75;
+    }
+
+    /* Connecting / error overlay */
+    .node-console-page .ssh-login-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(10, 12, 16, 0.95);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        transition: opacity 0.3s ease;
+    }
+    .node-console-page .ssh-login-card {
+        background: linear-gradient(135deg, rgba(17, 19, 22, 0.98) 0%, rgba(26, 28, 32, 0.98) 100%);
+        border-radius: 18px;
+        width: 480px;
+        max-width: 92%;
+        padding: 2rem;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(239, 68, 68, 0.1);
+        animation: slideUp 0.35s ease-out;
+    }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .node-console-page .ssh-login-card h3 {
+        font-weight: 700;
+        margin-bottom: 1rem;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+    .node-console-page .ssh-login-card h3 i { color: #ef4444; font-size: 1.4rem; }
+    .node-console-page .warning-box {
+        background: rgba(249, 115, 22, 0.1);
+        border: 1px solid rgba(249, 115, 22, 0.3);
+        border-radius: 10px;
+        padding: 0.85rem;
+        margin-bottom: 1rem;
+    }
+    .node-console-page .warning-box h4 {
+        color: var(--accent-orange);
+        font-size: 0.9rem;
+        margin-bottom: 0.4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .node-console-page .warning-box p {
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        margin: 0;
+        line-height: 1.45;
+    }
+    .node-console-page .btn-connect {
+        background: var(--gradient-danger);
+        border: none;
+        width: 100%;
+        padding: 0.7rem;
+        font-weight: 700;
+        border-radius: 10px;
+        font-size: 0.95rem;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .node-console-page .btn-connect:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.35);
+    }
+    .node-console-page .btn-outline-light {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        width: 100%;
+        padding: 0.6rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        margin-top: 0.5rem;
+        display: block;
+        text-align: center;
+        text-decoration: none;
+    }
+    .node-console-page .btn-outline-light:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-primary);
+    }
+    .node-console-page .d-none { display: none !important; }
+
+    /* Mobile tweaks */
+    @media (max-width: 768px) {
+        .node-console-page { height: calc(100vh - var(--header-height) - 40px); }
+        .node-console-page .console-topbar { padding: 0.5rem; gap: 0.5rem; }
+        .node-console-page .console-footer { font-size: 0.7rem; gap: 0.75rem; padding: 0.4rem 0.75rem; }
+        .node-console-page .control-buttons .btn { padding: 0.35rem 0.6rem; font-size: 0.75rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="node-console-page" id="nodeConsolePage">
+
+    <!-- Top bar -->
+    <div class="console-topbar">
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <div class="node-badge">
+                <i class="fa-solid fa-server"></i> NODE: {{ node.name }}
+                <span class="badge bg-danger" style="background:#dc2626;">HOST</span>
+            </div>
+            <div class="warning-badge">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>Root Access</span>
+            </div>
+            <div class="conn-status" id="connStatus">
+                <span class="status-led" id="statusLed"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+        </div>
+        <div class="control-buttons">
+            <button class="btn" id="fullscreenBtn" title="Toggle fullscreen"><i class="fa-solid fa-expand"></i></button>
+            <button class="btn" id="reconnectBtn" title="Reconnect"><i class="fa-solid fa-rotate-right"></i></button>
+            <button class="btn btn-exit" id="exitBtn" title="Exit console"><i class="fa-solid fa-circle-xmark"></i> Exit</button>
+        </div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="terminal-container"></div>
+
+    <!-- Inline footer hints -->
+    <div class="console-footer">
+        <span class="footer-hint"><i class="fa-solid fa-shield-halved"></i> Full root access to node host</span>
+        <span class="footer-hint"><i class="fa-solid fa-keyboard"></i> All standard shell commands available</span>
+        <span class="footer-hint"><i class="fa-solid fa-clipboard"></i> Paste: Ctrl+Shift+V</span>
+        <span class="footer-hint"><i class="fa-solid fa-exclamation-triangle"></i> Use with extreme caution</span>
+    </div>
+
+    <!-- Connection overlay (only shown while connecting or on error) -->
+    <div id="sshOverlay" class="ssh-login-overlay">
+        <div class="ssh-login-card">
+            <h3 id="overlayTitle">
+                <i class="fa-solid fa-server"></i>
+                <span id="overlayHeadline">Opening root shell…</span>
+            </h3>
+
+            <div class="warning-box">
+                <h4><i class="fa-solid fa-bolt"></i> ONE-CLICK ROOT SHELL</h4>
+                <p>Connecting you straight into the <strong>root shell of the node host</strong> — no IP, no port, no password. Every keystroke runs as <code>root</code> on this node.</p>
+            </div>
+
+            <div id="connectingSpinner" style="text-align:center; padding: 0.75rem;">
+                <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.75rem; color: var(--accent-cyan);"></i>
+                <div style="margin-top: .6rem; color: var(--text-muted); font-size: 0.85rem;">
+                    Connecting to <strong id="connectingTo">{{ node.name }}</strong>…
+                </div>
+            </div>
+
+            <div id="errorBox" class="d-none" style="margin-top: 0.75rem;">
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 8px; padding: 0.85rem; color: var(--accent-red); font-size: 0.85rem;">
+                    <i class="fa-solid fa-circle-exclamation" style="margin-right:.4rem;"></i>
+                    <span id="errorMsg">Connection failed.</span>
+                </div>
+                <button class="btn-connect" id="retryBtn" style="margin-top: 0.75rem;">
+                    <i class="fa-solid fa-rotate-right" style="margin-right:.4rem;"></i>Try again
+                </button>
+                <a href="{{ url_for('admin_node_view', node_id=node.id) }}" class="btn-outline-light">
+                    <i class="fa-solid fa-arrow-left" style="margin-right:.4rem;"></i>Back to node
+                </a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Tag the body so the page-specific .content / .footer overrides apply.
+    document.body.setAttribute('data-console-page', 'node');
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<!-- Xterm.js -->
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+
+<script>
+    (function() {
+        const nodeId = {{ node.id }};
+        const socket = io(window.location.origin, {
+            transports: ['websocket', 'polling'],
+            path: '/socket.io'
+        });
+
+        // Xterm terminal
+        const term = new Terminal({
+            cursorBlink: true,
+            cursorStyle: 'block',
+            fontSize: 14,
+            fontFamily: 'JetBrains Mono, Fira Code, monospace',
+            theme: {
+                background: '#0c0e12',
+                foreground: '#e6eef9',
+                cursor: '#ef4444',
+                selectionBackground: '#7c2d2d',
+                black: '#2e343a',
+                red: '#f07178',
+                green: '#a3d6a3',
+                yellow: '#ffcb6b',
+                blue: '#5fa3e0',
+                magenta: '#d39ad4',
+                cyan: '#7fdbdb',
+                white: '#eef4f9',
+            },
+            scrollback: 5000,
+            tabStopWidth: 4,
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        // DOM elements
+        const overlay = document.getElementById('sshOverlay');
+        const statusLed = document.getElementById('statusLed');
+        const statusText = document.getElementById('statusText');
+        const reconnectBtn = document.getElementById('reconnectBtn');
+        const exitBtn = document.getElementById('exitBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const terminalContainer = document.getElementById('terminal-container');
+        const errorBox = document.getElementById('errorBox');
+        const errorMsg = document.getElementById('errorMsg');
+        const retryBtn = document.getElementById('retryBtn');
+        const connectingSpinner = document.getElementById('connectingSpinner');
+        const overlayHeadline = document.getElementById('overlayHeadline');
+        const consolePage = document.getElementById('nodeConsolePage');
+
+        const nodeName = {{ node.name | tojson }};
+
+        let connected = false;
+        let connecting = false;
+
+        function setStatus(state, msg) {
+            statusLed.className = 'status-led';
+            if (state === 'connected') {
+                statusLed.classList.add('connected');
+                statusText.innerText = msg || 'Connected';
+            } else if (state === 'connecting') {
+                statusLed.classList.add('connecting');
+                statusText.innerText = msg || 'Connecting...';
+            } else if (state === 'disconnected') {
+                statusLed.classList.add('disconnected');
+                statusText.innerText = msg || 'Disconnected';
+            }
+        }
+
+        function showSpinner() {
+            overlay.classList.remove('d-none');
+            connectingSpinner.classList.remove('d-none');
+            errorBox.classList.add('d-none');
+            overlayHeadline.innerText = 'Opening root shell…';
+        }
+        function showError(msg) {
+            overlay.classList.remove('d-none');
+            connectingSpinner.classList.add('d-none');
+            errorBox.classList.remove('d-none');
+            errorMsg.innerText = msg || 'Connection failed.';
+            overlayHeadline.innerText = 'Could not open console';
+        }
+        function hideOverlay() {
+            overlay.classList.add('d-none');
+        }
+
+        function openTerminal() {
+            term.open(terminalContainer);
+            try { fitAddon.fit(); } catch (e) {}
+            term.focus();
+        }
+        openTerminal();
+
+        // -------------------- socket handlers --------------------
+        socket.on('connect', () => {
+            console.log('Socket.io connected — auto-opening PTY');
+            if (!connected && !connecting) {
+                autoConnect();
+            }
+        });
+
+        socket.on('ssh_connected', (data) => {
+            console.log('Console connected', data);
+            connecting = false;
+            connected = true;
+            hideOverlay();
+            try { fitAddon.fit(); } catch (e) {}
+            const backend = data.backend
+                ? data.backend.toUpperCase()
+                : (data.port || 'shell');
+            setStatus('connected',
+                `${data.node_name} · ${data.username || 'root'} @ ${backend}`);
+            term.clear();
+            term.writeln('\x1b[1;32m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
+            term.writeln('\x1b[1;32m║       CONNECTED — ROOT SHELL ON NODE HOST                 ║\x1b[0m');
+            term.writeln('\x1b[1;32m╚═══════════════════════════════════════════════════════════╝\x1b[0m');
+            term.writeln('\x1b[33mNode    : ' + data.node_name + '\x1b[0m');
+            term.writeln('\x1b[33mBackend : ' + (data.host || 'shell') + '\x1b[0m');
+            if (data.shell) {
+                term.writeln('\x1b[33mShell   : ' + data.shell + '\x1b[0m');
+            }
+            term.writeln('');
+            term.focus();
+            socket.emit('node_pty_resize', {
+                node_id: nodeId, cols: term.cols, rows: term.rows,
+            });
+        });
+
+        socket.on('ssh_output', (data) => {
+            term.write(data);
+        });
+
+        socket.on('ssh_error', (err) => {
+            console.error('Console error:', err);
+            connecting = false;
+            connected = false;
+            setStatus('disconnected', 'Error');
+            showError((err && err.error) || 'Connection failed');
+            term.writeln('\r\n\x1b[1;31m✘ ' + ((err && err.error) || 'Connection failed') + '\x1b[0m\r\n');
+        });
+
+        socket.on('ssh_disconnected', () => {
+            console.log('Console disconnected');
+            connected = false;
+            connecting = false;
+            setStatus('disconnected', 'Disconnected');
+            term.writeln('\r\n\x1b[33m── Session terminated. Press Reconnect to start a new shell. ──\x1b[0m\r\n');
+        });
+
+        socket.on('disconnect', () => {
+            if (connected) {
+                connected = false;
+                connecting = false;
+                setStatus('disconnected', 'Socket lost');
+                term.writeln('\x1b[1;31m\r\n[!] Connection to panel lost. Reconnecting…\x1b[0m');
+            }
+        });
+
+        // -------------------- terminal I/O --------------------
+        term.onData(data => {
+            if (!connected) return;
+            socket.emit('node_pty_input', { node_id: nodeId, input: data });
+        });
+
+        term.onResize(size => {
+            if (connected) {
+                socket.emit('node_pty_resize', {
+                    node_id: nodeId, cols: size.cols, rows: size.rows,
+                });
+            }
+        });
+
+        // -------------------- connect actions --------------------
+        function autoConnect() {
+            if (connecting || connected) return;
+            connecting = true;
+            setStatus('connecting', 'Spawning shell…');
+            showSpinner();
+            term.clear();
+            term.writeln('\x1b[36mOpening root shell on ' + nodeName + '…\x1b[0m\r\n');
+            socket.emit('node_pty_connect', {
+                node_id: nodeId,
+                cols: term.cols || 80,
+                rows: term.rows || 24,
+            });
+        }
+
+        retryBtn.addEventListener('click', autoConnect);
+
+        reconnectBtn.addEventListener('click', () => {
+            if (connected) {
+                socket.emit('node_pty_disconnect', { node_id: nodeId });
+            }
+            connected = false;
+            connecting = false;
+            setStatus('disconnected', 'Reconnecting…');
+            term.clear();
+            autoConnect();
+        });
+
+        exitBtn.addEventListener('click', () => {
+            if (connected) {
+                socket.emit('node_pty_disconnect', { node_id: nodeId });
+            }
+            window.location.href = '/admin/nodes/{{ node.id }}/view';
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            // Toggle fullscreen on the console panel (not the whole document)
+            // so the sidebar still slides back in when fullscreen exits.
+            const target = consolePage;
+            if (!document.fullscreenElement) {
+                if (target.requestFullscreen) target.requestFullscreen();
+                else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        function refit() {
+            if (term && fitAddon) {
+                try { fitAddon.fit(); } catch (e) {}
+                if (connected) {
+                    socket.emit('node_pty_resize', {
+                        node_id: nodeId,
+                        cols: term.cols,
+                        rows: term.rows,
+                    });
+                }
+            }
+        }
+        window.addEventListener('resize', refit);
+        // Re-fit after the sidebar's collapse animation runs.
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#menuToggle')) {
+                setTimeout(refit, 350);
+            }
+        });
+    })();
+</script>
+{% endblock %}

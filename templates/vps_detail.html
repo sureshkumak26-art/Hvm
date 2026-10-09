@@ -1,0 +1,4111 @@
+{% extends "base.html" %}
+{% block title %}{{ vps.hostname or vps.container_name }} - {{ panel_name }}{% endblock %}
+{% block header_title %}{{ vps.hostname or vps.container_name }}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('vps_list') }}" class="breadcrumb-item">My VPS</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">{{ vps.hostname or vps.container_name }}</span>
+</div>
+{% endblock %}
+{% block content %}
+<!-- VPS Detail Container with data attribute for live stats -->
+<div class="vps-detail-container" data-vps-id="{{ vps.id }}">
+
+<!-- VPS Header -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="user-avatar" style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary-hover));">
+                <i class="fas fa-server" style="font-size: 2rem;"></i>
+            </div>
+            <div>
+                <h2 style="font-size: 1.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>{{ vps.hostname or vps.container_name }}</span>
+                    {% if vps.whitelisted %}
+                    <i class="fas fa-star" style="color: #fbbf24; font-size: 1.25rem;" title="Whitelisted VPS - Protected from auto-suspension"></i>
+                    {% endif %}
+                </h2>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                    <span class="badge badge-info">ID: {{ vps.id }}</span>
+                    <span class="badge" style="background-color: var(--bg-tertiary);">
+                        <i class="fas fa-calendar"></i> Created {{ vps.created_at|relative_time }}
+                    </span>
+                    <div class="status-indicator">
+                        {% set _ds = (stats.status or '')|lower %}
+                        {% if vps.suspended %}
+                            {% set _dcls = 'suspended' %}{% set _dlbl = 'Suspended' %}
+                        {% elif _ds == 'running' %}
+                            {% set _dcls = 'running' %}{% set _dlbl = 'Running' %}
+                        {% elif _ds == 'stopped' %}
+                            {% set _dcls = 'stopped' %}{% set _dlbl = 'Stopped' %}
+                        {% elif _ds == 'missing' %}
+                            {% set _dcls = 'error' %}{% set _dlbl = 'Missing' %}
+                        {% elif _ds in ('error', 'timeout', 'connection_error', 'server_error', 'circuit_open') %}
+                            {% set _dcls = 'error' %}{% set _dlbl = 'Connection Issue' %}
+                        {% else %}
+                            {% set _dcls = 'stopped' %}{% set _dlbl = 'Unknown' %}
+                        {% endif %}
+                        <span class="status-dot {{ _dcls }}"></span>
+                        <span>{{ _dlbl }}</span>
+                    </div>
+                    {% if socketio_available or live_stats_available %}
+                    <span class="badge badge-success vps-live-indicator" style="display: none;" title="Live stats active">
+                        <i class="fas fa-bolt"></i> Live
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+       
+        <div style="margin-left: auto; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            {% if not vps.suspended %}
+            <button class="btn btn-{% if stats.status == 'running' %}warning{% else %}success{% endif %}"
+                    onclick="controlVPS('{{ vps.id }}', '{% if stats.status == 'running' %}stop{% else %}start{% endif %}')">
+                <i class="fas fa-{% if stats.status == 'running' %}stop{% else %}play{% endif %}"></i>
+                <span>{% if stats.status == 'running' %}Stop{% else %}Start{% endif %}</span>
+            </button>
+           
+            {% if stats.status == 'running' %}
+            <button class="btn btn-outline" onclick="controlVPS('{{ vps.id }}', 'restart')">
+                <i class="fas fa-sync-alt"></i>
+                <span>Restart</span>
+            </button>
+            {% endif %}
+           
+            <a href="{{ url_for('vps_console', vps_id=vps.id) }}" class="btn btn-primary">
+                <i class="fas fa-terminal"></i>
+                <span>Console</span>
+            </a>
+            
+            <a href="{{ url_for('vps_files', vps_id=vps.id) }}" class="btn btn-outline">
+                <i class="fas fa-folder-open"></i>
+                <span>Files</span>
+            </a>
+            
+            <a href="{{ url_for('vps_snapshots', vps_id=vps.id) }}" class="btn btn-outline">
+                <i class="fas fa-camera"></i>
+                <span>Snapshots</span>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Resource Stats with Progress Bars -->
+<div class="grid grid-3" style="margin-bottom: 1.5rem;">
+    <!-- CPU Card -->
+    <div class="card resource-card">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <div class="resource-icon cpu-icon">
+                <i class="fas fa-microchip"></i>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">CPU Usage</div>
+                <div style="font-size: 1.5rem; font-weight: 700;" class="vps-cpu" data-id="{{ vps.id }}">
+                    {% if stats.status == 'running' %}{{ (stats.cpu|default(0))|round(1) }}%{% else %}--{% endif %}
+                </div>
+            </div>
+        </div>
+        {% if stats.status == 'running' %}
+        <div class="progress-container">
+            <div class="progress-bar-modern cpu-progress" style="width: {{ stats.cpu|default(0) }}%;">
+                <div class="progress-glow"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+            <span>{{ vps.cpu }} Cores</span>
+            <span>{{ (stats.cpu|default(0))|round(1) }}% Used</span>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+            VPS is stopped
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- RAM Card -->
+    <div class="card resource-card">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <div class="resource-icon ram-icon">
+                <i class="fas fa-memory"></i>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">RAM Usage</div>
+                <div style="font-size: 1.5rem; font-weight: 700;" class="vps-ram-pct" data-id="{{ vps.id }}">
+                    {% if stats.status == 'running' %}{{ (stats.ram.pct|default(0))|round(1) }}%{% else %}--{% endif %}
+                </div>
+            </div>
+        </div>
+        {% if stats.status == 'running' %}
+        <div class="progress-container">
+            <div class="progress-bar-modern ram-progress" style="width: {{ stats.ram.pct|default(0) }}%;">
+                <div class="progress-glow"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+            <span>{{ vps.ram }}</span>
+            <span class="vps-ram-used" data-id="{{ vps.id }}">{{ (stats.ram.used|default(0))|round }}MB / {{ stats.ram.total|default(0) }}MB</span>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+            VPS is stopped
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Disk Card -->
+    <div class="card resource-card">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <div class="resource-icon disk-icon">
+                <i class="fas fa-hdd"></i>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Disk Usage</div>
+                <div style="font-size: 1.5rem; font-weight: 700;" class="vps-disk" data-id="{{ vps.id }}">
+                    {% if stats.status == 'running' and stats.disk.use_percent|default('0%') != 'Unknown' %}{{ stats.disk.use_percent|default('0%') }}{% else %}--{% endif %}
+                </div>
+            </div>
+        </div>
+        {% if stats.status == 'running' and stats.disk.use_percent|default('0%') != 'Unknown' %}
+        <div class="progress-container">
+            <div class="progress-bar-modern disk-progress" style="width: {{ stats.disk.use_percent|default('0%')|replace('%','') }}%;">
+                <div class="progress-glow"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+            <span>{{ vps.storage }}</span>
+            <span>{{ stats.disk.use_percent|default('0%') }} Used</span>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 1rem; color: var(--text-secondary); font-size: 0.875rem;">
+            {% if stats.status == 'running' %}Calculating...{% else %}VPS is stopped{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Main Content Tabs -->
+<div class="tabs-modern">
+    <div class="tab-modern active" onclick="showTab('overview')">
+        <i class="fas fa-home"></i>
+        <span>Overview</span>
+    </div>
+    <div class="tab-modern" onclick="showTab('performance')">
+        <i class="fas fa-chart-line"></i>
+        <span>Performance</span>
+    </div>
+    <div class="tab-modern" onclick="showTab('network')">
+        <i class="fas fa-network-wired"></i>
+        <span>Network</span>
+    </div>
+    <div class="tab-modern" onclick="showTab('ports')">
+        <i class="fas fa-plug"></i>
+        <span>Port Forwarding</span>
+    </div>
+    <div class="tab-modern" onclick="showTab('settings')">
+        <i class="fas fa-cog"></i>
+        <span>Settings</span>
+    </div>
+</div>
+
+<!-- Overview Tab -->
+<div id="tab-overview" class="tab-content active">
+    <div class="grid grid-2" style="margin-top: 1.5rem; gap: 1.5rem;">
+        <!-- System Information -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-info-circle"></i>
+                    System Information
+                </h3>
+            </div>
+            <div class="info-table">
+                <div class="info-row">
+                    <span class="info-label">Hostname</span>
+                    <span class="info-value">{{ vps.hostname or vps.container_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Container Name</span>
+                    <span class="info-value" style="font-family: monospace;">{{ vps.container_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Operating System</span>
+                    <span class="info-value">
+                        <span class="badge badge-info">
+                            <i class="{{ os_icon|get_os_icon }}"></i>
+                            {{ vps.os_version }}
+                        </span>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value">
+                        <div class="status-indicator">
+                            {% set _ds2 = (stats.status or '')|lower %}
+                            {% if vps.suspended %}
+                                {% set _dcls2 = 'suspended' %}{% set _dlbl2 = 'Suspended' %}
+                            {% elif _ds2 == 'running' %}
+                                {% set _dcls2 = 'running' %}{% set _dlbl2 = 'Running' %}
+                            {% elif _ds2 == 'stopped' %}
+                                {% set _dcls2 = 'stopped' %}{% set _dlbl2 = 'Stopped' %}
+                            {% elif _ds2 == 'missing' %}
+                                {% set _dcls2 = 'error' %}{% set _dlbl2 = 'Missing' %}
+                            {% elif _ds2 in ('error', 'timeout', 'connection_error', 'server_error', 'circuit_open') %}
+                                {% set _dcls2 = 'error' %}{% set _dlbl2 = 'Connection Issue' %}
+                            {% else %}
+                                {% set _dcls2 = 'stopped' %}{% set _dlbl2 = 'Unknown' %}
+                            {% endif %}
+                            <span class="status-dot {{ _dcls2 }}"></span>
+                            <span>{{ _dlbl2 }}</span>
+                        </div>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Node</span>
+                    <span class="info-value">{{ node.name }} <span class="badge" style="background: var(--bg-tertiary);">{{ node.location }}</span></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Public IP Address</span>
+                    <span class="info-value" style="font-family: monospace;">
+                        {% if vps.ip_address %}
+                        <span style="color: var(--accent-success);">{{ vps.ip_address }}</span>
+                        <span class="badge badge-success" style="font-size: 0.7rem; margin-left: 0.5rem;">Routed</span>
+                        {% elif vps.ip_alias %}
+                        {{ vps.ip_alias }} <span class="badge badge-info" style="font-size: 0.7rem;">Alias</span>
+                        {% else %}
+                        <span class="text-muted">No public IP assigned</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Private IP</span>
+                    <span class="info-value" style="font-family: monospace;">{{ private_ip }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">{{ vps.created_at|relative_time }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Last Started</span>
+                    <span class="info-value">{{ vps.last_started|relative_time if vps.last_started else 'Never' }}</span>
+                </div>
+                {% if stats.status == 'running' %}
+                <div class="info-row">
+                    <span class="info-label">Uptime</span>
+                    <span class="info-value">{{ stats.uptime|default('N/A') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Processes</span>
+                    <span class="info-value">{{ stats.processes|default('N/A') }}</span>
+                </div>
+                {% endif %}
+                <div class="info-row">
+                    <span class="info-label">Bandwidth Quota</span>
+                    <span class="info-value">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-family: monospace;">
+                                {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+                                    <i class="fas fa-database" style="color: var(--accent-info);"></i> {{ (vps.get('bandwidth_quota_gb', 0)|string + ' GB') if vps.get('bandwidth_quota_gb', 0) < 1000 else ((vps.get('bandwidth_quota_gb', 0) / 1000)|round(1)|string + ' TB') }} Quota
+                                {% else %}
+                                    <i class="fas fa-database" style="color: var(--text-secondary);"></i> Unlimited
+                                {% endif %}
+                            </span>
+                            <span style="color: var(--text-secondary);">|</span>
+                            <span style="font-family: monospace;" class="bandwidth-usage-header">
+                                <i class="fas fa-chart-line" style="color: var(--accent-warning);"></i> {{ (vps.get('bandwidth_used_gb', 0)|round(2)|string + ' GB') if vps.get('bandwidth_used_gb', 0) else '0 GB' }} Used
+                            </span>
+                            {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+                            <span style="color: var(--text-secondary);">|</span>
+                            <span style="font-family: monospace;">
+                                {% set usage_percent = ((vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) * 100) if vps.get('bandwidth_quota_gb', 0) > 0 else 0 %}
+                                <i class="fas fa-percentage" style="color: {% if usage_percent > 90 %}var(--accent-danger){% elif usage_percent > 75 %}var(--accent-warning){% else %}var(--accent-success){% endif %};"></i> {{ usage_percent|round(1) }}%
+                            </span>
+                            {% endif %}
+                            {% if current_user.is_admin %}
+                            <button class="btn btn-sm btn-outline-primary" onclick="showBandwidthQuotaModal()" style="margin-left: 0.5rem;">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            {% endif %}
+                        </div>
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Expiration Information -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-clock"></i>
+                    Expiration Information
+                </h3>
+            </div>
+            {% if vps.auto_suspend_enabled and vps.expires_at %}
+            {% set expires_dt = vps.expires_at|parse_datetime %}
+            {% if expires_dt %}
+            {% set current_time = now() %}
+            {% set time_diff = (expires_dt - current_time).total_seconds() %}
+            {% set days_left = (time_diff / 86400)|int %}
+            {% set hours_left = (time_diff / 3600)|int %}
+            {% set is_expired = days_left < 0 %}
+            
+            <div class="expiration-card {% if is_expired %}expired{% elif days_left <= 3 %}critical{% elif days_left <= 7 %}warning{% else %}active{% endif %}">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div class="expiration-icon">
+                            <i class="fas fa-{% if is_expired %}exclamation-triangle{% else %}clock{% endif %}"></i>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">Status</div>
+                            <div style="font-size: 1.25rem; font-weight: 700;">
+                                {% if is_expired %}
+                                    EXPIRED
+                                {% elif days_left == 0 %}
+                                    {{ hours_left }} Hours Left
+                                {% elif days_left <= 3 %}
+                                    {{ days_left }} Days Left
+                                {% else %}
+                                    {{ days_left }} Days Remaining
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% if is_expired %}
+                        <span class="badge badge-danger pulse-badge">
+                            <i class="fas fa-exclamation-triangle"></i> Expired
+                        </span>
+                    {% elif days_left <= 1 %}
+                        <span class="badge badge-danger pulse-badge">
+                            <i class="fas fa-exclamation-triangle"></i> Critical
+                        </span>
+                    {% elif days_left <= 3 %}
+                        <span class="badge badge-warning pulse-badge">
+                            <i class="fas fa-clock"></i> Expiring Soon
+                        </span>
+                    {% elif days_left <= 7 %}
+                        <span class="badge badge-info">
+                            <i class="fas fa-clock"></i> {{ days_left }}d left
+                        </span>
+                    {% else %}
+                        <span class="badge badge-success">
+                            <i class="fas fa-check"></i> Active
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <div class="info-table">
+                    <div class="info-row">
+                        <span class="info-label">Expiration Date</span>
+                        <span class="info-value">{{ expires_dt.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Time Remaining</span>
+                        <span class="info-value">
+                            {% if is_expired %}
+                                <span style="color: var(--accent-danger);">Expired {{ (days_left * -1) }} days ago</span>
+                            {% elif days_left == 0 %}
+                                <span style="color: var(--accent-danger);">{{ hours_left }} hours</span>
+                            {% else %}
+                                {{ days_left }} days, {{ (hours_left % 24) }} hours
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Expiration Period</span>
+                        <span class="info-value">{{ vps.expiration_days }} days</span>
+                    </div>
+                    {% if vps.last_renewed_at %}
+                    <div class="info-row">
+                        <span class="info-label">Last Renewed</span>
+                        <span class="info-value">{{ vps.last_renewed_at|parse_datetime|relative_time if vps.last_renewed_at else 'Never' }}</span>
+                    </div>
+                    {% endif %}
+                    {% if vps.renewal_count %}
+                    <div class="info-row">
+                        <span class="info-label">Renewal Count</span>
+                        <span class="info-value">{{ vps.renewal_count }} time{{ 's' if vps.renewal_count != 1 else '' }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if is_expired or days_left <= 7 %}
+                <div class="alert-box {% if is_expired %}danger{% else %}warning{% endif %}">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>
+                            {% if is_expired %}
+                                VPS Has Expired
+                            {% else %}
+                                VPS Expiring Soon
+                            {% endif %}
+                        </strong>
+                        <p>
+                            {% if is_expired %}
+                                This VPS has expired and {% if vps.suspended %}has been suspended{% else %}will be suspended soon{% endif %}. Please contact an administrator to renew your VPS.
+                            {% else %}
+                                Your VPS will expire in {{ days_left }} day{{ 's' if days_left != 1 else '' }}. Contact an administrator to extend the expiration date.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state-small">
+                <div class="empty-icon">
+                    <i class="fas fa-infinity"></i>
+                </div>
+                <h4>No Expiration Set</h4>
+                <p>This VPS does not have an expiration date configured.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-bolt"></i>
+                Quick Actions
+            </h3>
+        </div>
+        <div class="action-grid">
+            {% if stats.status == 'running' and not vps.suspended %}
+            <button class="action-button" onclick="generateSSH()">
+                <div class="action-icon" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;">
+                    <i class="fas fa-terminal"></i>
+                </div>
+                <div class="action-content">
+                    <div class="action-title">SSH Session</div>
+                    <div class="action-desc">Generate SSH credentials</div>
+                </div>
+            </button>
+            {% endif %}
+           
+            <button class="action-button" onclick="showReinstallModal()">
+                <div class="action-icon" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;">
+                    <i class="fas fa-redo-alt"></i>
+                </div>
+                <div class="action-content">
+                    <div class="action-title">Reinstall OS</div>
+                    <div class="action-desc">Fresh installation</div>
+                </div>
+            </button>
+           
+            {% if current_user.is_admin %}
+            <a class="action-button" href="{{ url_for('vps_ipconfig_page', vps_id=vps.id) }}" style="text-decoration: none; color: inherit;">
+                <div class="action-icon" style="background: rgba(139, 92, 246, 0.1); color: #8b5cf6;">
+                    <i class="fas fa-network-wired"></i>
+                </div>
+                <div class="action-content">
+                    <div class="action-title">Manage IP</div>
+                    <div class="action-desc">Configure public IP</div>
+                </div>
+            </a>
+            {% endif %}
+           
+            <button class="action-button" onclick="showRenameModal()">
+                <div class="action-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">
+                    <i class="fas fa-pen"></i>
+                </div>
+                <div class="action-content">
+                    <div class="action-title">Rename VPS</div>
+                    <div class="action-desc">Change hostname</div>
+                </div>
+            </button>
+           
+            {% if current_user.is_admin and not vps.whitelisted %}
+            <button class="action-button" onclick="suspendVPS()">
+                <div class="action-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+                    <i class="fas fa-ban"></i>
+                </div>
+                <div class="action-content">
+                    <div class="action-title">Suspend VPS</div>
+                    <div class="action-desc">Temporarily disable</div>
+                </div>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Performance Tab -->
+<div id="tab-performance" class="tab-content" style="display: none;">
+    <!-- Connection Status Message -->
+    <div id="connectionStatus" style="display: none;"></div>
+    
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-line"></i>
+                Live Performance Metrics
+            </h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <select id="timeRange" class="form-control" style="width: auto;" onchange="changeTimeRange()">
+                    <option value="1m">1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="10m">10 Minutes</option>
+                    <option value="30m">30 Minutes</option>
+                    <option value="1h" selected>1 Hour</option>
+                    <option value="6h">6 Hours</option>
+                    <option value="24h">24 Hours</option>
+                </select>
+                <button class="btn btn-sm btn-outline" onclick="refreshCharts()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <div class="auto-refresh-toggle">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                        <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()">
+                        <span style="font-size: 0.875rem;">Auto Refresh</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+       
+        {% if stats.status == 'running' %}
+        <!-- Real-time Stats Cards -->
+        <div class="performance-stats-grid" style="padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon cpu-icon">
+                    <i class="fas fa-microchip"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">CPU Usage</div>
+                    <div class="perf-stat-value" id="liveCpuValue">{{ (stats.cpu|default(0))|round(1) }}%</div>
+                    <div class="perf-stat-trend" id="cpuTrend">
+                        <i class="fas fa-arrow-up"></i> <span>0.0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon ram-icon">
+                    <i class="fas fa-memory"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">RAM Usage</div>
+                    <div class="perf-stat-value" id="liveRamValue">{{ (stats.ram.pct|default(0))|round(1) }}%</div>
+                    <div class="perf-stat-trend" id="ramTrend">
+                        <i class="fas fa-arrow-up"></i> <span>0.0%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon disk-icon">
+                    <i class="fas fa-hdd"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">Disk Usage</div>
+                    <div class="perf-stat-value" id="liveDiskValue">{{ stats.disk.use_percent|default('0%') }}</div>
+                    <div class="perf-stat-trend" id="diskTrend">
+                        <i class="fas fa-minus"></i> <span>Stable</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon network-icon">
+                    <i class="fas fa-network-wired"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">Network I/O</div>
+                    <div class="perf-stat-value" id="liveNetworkValue">
+                        <div style="font-size: 0.75rem;">↓ <span id="networkRx">{{ (stats.network.rx if stats.network and 'rx' in stats.network else '0 B') }}</span></div>
+                        <div style="font-size: 0.75rem;">↑ <span id="networkTx">{{ (stats.network.tx if stats.network and 'tx' in stats.network else '0 B') }}</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon process-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">Processes</div>
+                    <div class="perf-stat-value" id="liveProcessValue">{{ stats.processes|default(0) }}</div>
+                    <div class="perf-stat-trend" id="processTrend">
+                        <i class="fas fa-minus"></i> <span>Stable</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="perf-stat-card">
+                <div class="perf-stat-icon load-icon">
+                    <i class="fas fa-tachometer-alt"></i>
+                </div>
+                <div class="perf-stat-content">
+                    <div class="perf-stat-label">Load Average</div>
+                    <div class="perf-stat-value" id="liveLoadValue">
+                        <div style="font-size: 0.75rem;">1m: <span id="load1m">{{ (stats.load_average['1min'] if stats.load_average and '1min' in stats.load_average else 0.0)|round(2) }}</span></div>
+                        <div style="font-size: 0.75rem;">5m: <span id="load5m">{{ (stats.load_average['5min'] if stats.load_average and '5min' in stats.load_average else 0.0)|round(2) }}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts Container -->
+        <div style="padding: 1.5rem;">
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h4 class="chart-title">CPU Usage Over Time</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h4 class="chart-title">Memory Usage Over Time</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="ramChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h4 class="chart-title">Network Traffic</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="networkChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h4 class="chart-title">Disk I/O</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="diskIOChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h4 class="chart-title">System Load</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="loadChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h4 class="chart-title">Process Count</h4>
+                    <div class="chart-wrapper">
+                        <canvas id="processChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-chart-line"></i>
+            <h3>VPS Not Running</h3>
+            <p>Start the VPS to view performance metrics</p>
+            <button class="btn btn-primary" onclick="controlVPS('{{ vps.id }}', 'start')">
+                <i class="fas fa-play"></i> Start VPS
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Network Tab -->
+<div id="tab-network" class="tab-content" style="display: none;">
+    <div class="grid grid-2" style="margin-top: 1.5rem; gap: 1.5rem;">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-network-wired"></i>
+                    Network Information
+                </h3>
+            </div>
+            <div class="info-table">
+                <div class="info-row">
+                    <span class="info-label">Public IP</span>
+                    <span class="info-value" style="font-family: monospace;">{{ display_ip }}</span>
+                </div>
+                {% if vps.ip_alias %}
+                <div class="info-row">
+                    <span class="info-label">IP Alias</span>
+                    <span class="info-value" style="font-family: monospace;">{{ vps.ip_alias }}</span>
+                </div>
+                {% endif %}
+                <div class="info-row">
+                    <span class="info-label">Private IP</span>
+                    <span class="info-value" style="font-family: monospace;">{{ private_ip }}</span>
+                </div>
+                {% if stats.status == 'running' and stats.network %}
+                <div class="info-row">
+                    <span class="info-label">RX (Received)</span>
+                    <span class="info-value">{{ (stats.network.rx if stats.network and 'rx' in stats.network else 'N/A') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">TX (Transmitted)</span>
+                    <span class="info-value">{{ (stats.network.tx if stats.network and 'tx' in stats.network else 'N/A') }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-plug"></i>
+                    Active Port Forwards
+                </h3>
+            </div>
+            {% if forwards %}
+            <div style="max-height: 300px; overflow-y: auto;">
+                {% for forward in forwards[:5] %}
+                <div class="port-forward-item">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="port-badge">{{ forward.vps_port }}</div>
+                        <i class="fas fa-arrow-right" style="color: var(--text-secondary);"></i>
+                        <div class="port-badge">{{ forward.host_port }}</div>
+                    </div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                        {% if 'tcp' in forward.protocol and 'udp' in forward.protocol %}
+                            <span class="badge badge-info" style="margin-right: 0.25rem;">TCP</span>
+                            <span class="badge badge-success">UDP</span>
+                        {% else %}
+                            <span class="badge">{{ forward.protocol|upper }}</span>
+                        {% endif %}
+                        - {{ forward.description or 'No description' }}
+                    </div>
+                </div>
+                {% endfor %}
+                {% if forwards|length > 5 %}
+                <div style="text-align: center; padding: 0.75rem;">
+                    <a href="#" onclick="showTab('ports'); return false;" style="color: var(--accent-primary); font-size: 0.875rem;">
+                        View all {{ forwards|length }} port forwards <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="empty-state-small">
+                <i class="fas fa-plug"></i>
+                <p>No port forwards configured</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Port Forwarding Tab -->
+<div id="tab-ports" class="tab-content" style="display: none;">
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-plug"></i>
+                Port Forwarding Rules
+            </h3>
+            <button class="btn btn-primary btn-sm" onclick="showAddPortModal()">
+                <i class="fas fa-plus"></i> Add Port
+            </button>
+        </div>
+        {% if forwards %}
+        <div class="table-responsive">
+            <table class="table-modern">
+                <thead>
+                    <tr>
+                        <th>VPS Port</th>
+                        <th>Host Port</th>
+                        <th>Protocol</th>
+                        <th>Description</th>
+                        <th>Created</th>
+                        <th>Hits</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for forward in forwards %}
+                    <tr>
+                        <td><span class="port-badge">{{ forward.vps_port }}</span></td>
+                        <td>
+                            <span class="badge badge-info" style="font-family: monospace;">
+                                {{ forward.host_port }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if 'tcp' in forward.protocol and 'udp' in forward.protocol %}
+                                <span class="badge badge-info" style="margin-right: 0.25rem;">TCP</span>
+                                <span class="badge badge-success">UDP</span>
+                            {% else %}
+                                <span class="badge">{{ forward.protocol|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ forward.description or '-' }}</td>
+                        <td>{{ forward.created_at|relative_time }}</td>
+                        <td><span class="badge badge-success">{{ forward.hits }}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" onclick="removePort('{{ forward.id }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-plug"></i>
+            <h3>No Port Forwards</h3>
+            <p>You haven't set up any port forwarding rules yet.</p>
+            <button class="btn btn-primary" onclick="showAddPortModal()">
+                <i class="fas fa-plus"></i> Add Port Forward
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Settings Tab -->
+<div id="tab-settings" class="tab-content" style="display: none;">
+    <div class="grid grid-2" style="margin-top: 1.5rem; gap: 1.5rem;">
+        <!-- Password Management -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-key"></i>
+                    VPS Password Management
+                </h3>
+            </div>
+            <div style="padding: 1.5rem;">
+                <!-- Current Password Display -->
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-weight: 600;">
+                        <i class="fas fa-lock"></i>
+                        Current Password
+                    </label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="password" id="currentPasswordDisplay" value="Loading..." readonly style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-family: 'Courier New', monospace; font-weight: 600;">
+                        <button type="button" class="btn btn-outline" onclick="togglePasswordVisibility()" title="Show/Hide Password" style="padding: 0.75rem 1rem;">
+                            <i id="passwordToggleIcon" class="fas fa-eye"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="copyPassword()" title="Copy Password" style="padding: 0.75rem 1rem;">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="refreshPassword()" title="Refresh Password" style="padding: 0.75rem 1rem;">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <small id="passwordSource" style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                        <i class="fas fa-info-circle"></i> Loading password information...
+                    </small>
+                </div>
+
+                <!-- Change Password Form -->
+                <form onsubmit="changeVPSPassword(event)">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-weight: 600;">
+                            <i class="fas fa-key"></i>
+                            New Password
+                        </label>
+                        <div style="position: relative;">
+                            <input type="password" id="newPassword" class="form-control" placeholder="Enter new password" required minlength="8" maxlength="128" style="padding: 0.75rem; padding-right: 3rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; width: 100%;" oninput="checkPasswordStrength()">
+                            <button type="button" class="btn btn-sm btn-outline" onclick="generatePassword()" title="Generate Secure Password" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); padding: 0.5rem;">
+                                <i class="fas fa-magic"></i>
+                            </button>
+                        </div>
+                        <div id="passwordStrength" class="password-strength" style="margin-top: 0.5rem; display: none;">
+                            <div class="strength-bar">
+                                <div id="strengthProgress" class="strength-progress"></div>
+                            </div>
+                            <div id="strengthText" class="strength-text"></div>
+                        </div>
+                        <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                            8-128 characters required. Avoid common passwords.
+                        </small>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-weight: 600;">
+                            <i class="fas fa-check-circle"></i>
+                            Confirm New Password
+                        </label>
+                        <input type="password" id="confirmPassword" class="form-control" placeholder="Confirm new password" required minlength="8" maxlength="128" style="padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; width: 100%;" oninput="checkPasswordMatch()">
+                        <div id="passwordMatch" style="margin-top: 0.5rem; display: none;">
+                            <small id="matchText" style="display: flex; align-items: center; gap: 0.5rem;"></small>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;" id="changePasswordBtn">
+                        <i class="fas fa-save"></i> Change Password
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Danger Zone
+                </h3>
+            </div>
+            <div class="danger-zone">
+                <div class="danger-item">
+                    <div>
+                        <div class="danger-title">Reinstall Operating System</div>
+                        <div class="danger-desc">Wipe all data and reinstall the OS</div>
+                    </div>
+                    <button class="btn btn-warning" onclick="showReinstallModal()">
+                        <i class="fas fa-redo-alt"></i> Reinstall
+                    </button>
+                </div>
+                {% if current_user.is_admin %}
+                <div class="danger-item">
+                    <div>
+                        <div class="danger-title">Delete VPS</div>
+                        <div class="danger-desc">Permanently delete this VPS and all its data</div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteVPS()">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<!-- Add Port Modal -->
+<div id="addPortModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus"></i> Add Port Forward</h3>
+            <button class="modal-close" onclick="hideModal('addPortModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>VPS Port</label>
+                <input type="number" id="vpsPort" class="form-control" placeholder="8080" min="1" max="65535">
+            </div>
+            <div class="form-group">
+                <label>Protocol</label>
+                <select id="portProtocol" class="form-control">
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                    <option value="tcp,udp">TCP + UDP (Both)</option>
+                </select>
+                <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                    Select TCP+UDP to forward both protocols on the same port
+                </small>
+            </div>
+            <div class="form-group">
+                <label>Description (Optional)</label>
+                <input type="text" id="portDescription" class="form-control" placeholder="Web Server">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="hideModal('addPortModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="addPort()">
+                <i class="fas fa-plus"></i> Add Port
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Reinstall Modal -->
+<div id="reinstallModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-redo-alt"></i> Reinstall Operating System</h3>
+            <button class="modal-close" onclick="hideModal('reinstallModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert-box warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>
+                    <strong>Warning!</strong>
+                    <p>This will delete all data on the VPS and perform a fresh installation.</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Select Operating System</label>
+                <select id="osVersion" class="form-control">
+                    {% for os in os_options %}
+                    <option value="{{ os.value }}" {% if os.value == vps.os_version %}selected{% endif %}>
+                        {{ os.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="hideModal('reinstallModal')">Cancel</button>
+            <button class="btn btn-warning" onclick="reinstallVPS()">
+                <i class="fas fa-redo-alt"></i> Reinstall
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- IP Management is now on the dedicated page /vps/<id>/ipconfig (admin only) -->
+
+<!-- Rename Modal -->
+<div id="renameModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-pen"></i> Rename VPS</h3>
+            <button class="modal-close" onclick="hideModal('renameModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>New Hostname</label>
+                <input type="text" id="newHostname" class="form-control" value="{{ vps.hostname or vps.container_name }}" placeholder="my-vps">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="hideModal('renameModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="renameVPS()">
+                <i class="fas fa-check"></i> Rename
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bandwidth Quota Modal -->
+<div id="bandwidthQuotaModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-database"></i> Bandwidth Quota Management</h3>
+            <button class="modal-close" onclick="hideModal('bandwidthQuotaModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: var(--border-radius-sm); padding: 1rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-info-circle" style="color: var(--accent-info);"></i>
+                    <strong>Bandwidth Quota System</strong>
+                </div>
+                <p style="margin: 0; font-size: 0.875rem; color: var(--text-secondary);">
+                    Set a total bandwidth limit (in GB) that the VPS can use. When the limit is exceeded, the VPS may be throttled or suspended. Set to 0 for unlimited bandwidth.
+                </p>
+            </div>
+            
+            <!-- Current Usage Display -->
+            <div style="background: var(--bg-tertiary); border-radius: var(--border-radius-sm); padding: 1rem; margin-bottom: 1.5rem;">
+                <h4 style="margin-bottom: 1rem; font-size: 1rem;">Current Usage</h4>
+                <div class="grid grid-3">
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-info);" class="bandwidth-usage-stats">
+                            {{ (vps.get('bandwidth_used_gb', 0)|round(2)|string + ' GB') if vps.get('bandwidth_used_gb', 0) else '0 GB' }}
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Used</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-primary);">
+                            {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+                                {{ (vps.get('bandwidth_quota_gb', 0)|string + ' GB') if vps.get('bandwidth_quota_gb', 0) < 1000 else ((vps.get('bandwidth_quota_gb', 0) / 1000)|round(1)|string + ' TB') }}
+                            {% else %}
+                                Unlimited
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Quota</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: 700; color: {% if vps.get('bandwidth_quota_gb', 0) > 0 and (vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) > 0.9 %}var(--accent-danger){% elif vps.get('bandwidth_quota_gb', 0) > 0 and (vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) > 0.75 %}var(--accent-warning){% else %}var(--accent-success){% endif %};" class="bandwidth-percentage">
+                            {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+                                {{ (((vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) * 100)|round(1)|string + '%') }}
+                            {% else %}
+                                0%
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Usage</div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if vps.get('bandwidth_quota_gb', 0) > 0 %}
+            <!-- Bandwidth Usage Progress Bar -->
+            <div style="background: var(--bg-tertiary); border-radius: var(--border-radius-sm); padding: 1rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.875rem; color: var(--text-secondary);">Bandwidth Usage</span>
+                    <span style="font-size: 0.875rem; font-weight: 600;" class="bandwidth-percentage">
+                        {{ (((vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) * 100)|round(1)|string + '%') }}
+                    </span>
+                </div>
+                <div class="progress" style="height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                    {% set usage_percent = ((vps.get('bandwidth_used_gb', 0) or 0) / vps.get('bandwidth_quota_gb', 1) * 100) if vps.get('bandwidth_quota_gb', 0) > 0 else 0 %}
+                    <div class="progress-bar bandwidth-progress-bar {% if usage_percent > 90 %}danger{% elif usage_percent > 75 %}warning{% else %}success{% endif %}" 
+                         style="width: {{ usage_percent|round(1) }}%; height: 100%; transition: width 0.3s ease;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 0.25rem;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);" class="bandwidth-usage-stats">
+                        {{ (vps.get('bandwidth_used_gb', 0)|round(2)|string + ' GB') if vps.get('bandwidth_used_gb', 0) else '0 GB' }} used
+                    </span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">
+                        {{ (vps.get('bandwidth_quota_gb', 0)|string + ' GB') if vps.get('bandwidth_quota_gb', 0) < 1000 else ((vps.get('bandwidth_quota_gb', 0) / 1000)|round(1)|string + ' TB') }} total
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Quota Exceeded Warning -->
+            <div class="alert alert-danger bandwidth-quota-warning" style="display: none; margin-bottom: 1.5rem;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>Bandwidth Quota Exceeded!</strong> Your VPS has exceeded its bandwidth limit and may be throttled.
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-database"></i> Bandwidth Quota (GB)</label>
+                <input type="number" id="bandwidthQuota" class="form-control" value="{{ vps.get('bandwidth_quota_gb', 0) }}" min="0" max="10000" placeholder="0 = Unlimited">
+                <small class="form-text">Total bandwidth limit in GB (0 = unlimited)</small>
+            </div>
+            
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="resetUsage" style="margin: 0;">
+                    <i class="fas fa-redo"></i> Reset Current Usage
+                </label>
+                <small class="form-text">Check this to reset the bandwidth usage counter to 0</small>
+            </div>
+            
+            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: var(--border-radius-sm); padding: 1rem; margin-top: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-exclamation-triangle" style="color: var(--accent-warning);"></i>
+                    <strong>Important Notes</strong>
+                </div>
+                <ul style="margin: 0; padding-left: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                    <li>Bandwidth usage is tracked from container network interface statistics</li>
+                    <li>Usage includes both upload and download traffic</li>
+                    <li>Monitoring script runs every 5 minutes to check quota</li>
+                    <li>VPS may be automatically suspended when quota is exceeded</li>
+                    <li>Reset usage counter when changing quota or starting new billing period</li>
+                </ul>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="hideModal('bandwidthQuotaModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="updateBandwidthQuota()">
+                <i class="fas fa-save"></i> Update Quota
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- SSH Loading Modal -->
+<div id="sshLoadingModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-body" style="text-align: center; padding: 3rem 2rem;">
+            <div class="loading-spinner" style="margin: 0 auto 1.5rem;">
+                <div class="spinner"></div>
+            </div>
+            <h3 style="margin-bottom: 0.5rem;">Generating SSH Session</h3>
+            <p style="color: var(--text-secondary); margin: 0;">Please wait while we set up your SSH session...</p>
+            <div style="margin-top: 1.5rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.875rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-check" style="color: var(--accent-success);"></i>
+                    <span>Installing tmate if needed</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-spinner fa-spin" style="color: var(--accent-primary);"></i>
+                    <span>Creating session</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-clock" style="color: var(--text-secondary);"></i>
+                    <span>Generating URLs</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SSH Modal -->
+<div id="sshModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-terminal"></i> SSH Access</h3>
+            <button class="modal-close" onclick="hideModal('sshModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>SSH Command</label>
+                <div style="position: relative;">
+                    <input type="text" id="sshCommand" class="form-control" readonly style="font-family: monospace; padding-right: 40px;">
+                    <button class="copy-btn" onclick="copyToClipboard('sshCommand')" title="Copy">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Web SSH URL</label>
+                <div style="position: relative;">
+                    <input type="text" id="webUrl" class="form-control" readonly style="padding-right: 40px;">
+                    <button class="copy-btn" onclick="copyToClipboard('webUrl')" title="Copy">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="alert-box info">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <strong>SSH Session Information</strong>
+                    <p>Use the SSH command in your terminal or click the button below to open Web SSH in your browser.</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="hideModal('sshModal')">Close</button>
+            <a id="webSshLink" href="#" target="_blank" class="btn btn-primary">
+                <i class="fas fa-external-link-alt"></i> Open Web SSH
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Resource Cards */
+.resource-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.resource-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.resource-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.cpu-icon {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.ram-icon {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.disk-icon {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+/* Modern Progress Bars */
+.progress-container {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-modern {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.cpu-progress {
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.ram-progress {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.disk-progress {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.progress-glow {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Modern Tabs */
+.tabs-modern {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+    overflow-x: auto;
+    padding-bottom: 0;
+}
+
+.tab-modern {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-weight: 500;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+}
+
+.tab-modern:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+}
+
+.tab-modern.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+.tab-modern i {
+    font-size: 1rem;
+}
+
+/* Info Table */
+.info-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.info-value {
+    font-weight: 500;
+    text-align: right;
+}
+
+/* Expiration Card */
+.expiration-card {
+    padding: 1.5rem;
+    border-radius: 12px;
+    border-left: 4px solid;
+}
+
+.expiration-card.active {
+    background: rgba(59, 130, 246, 0.05);
+    border-left-color: #3b82f6;
+}
+
+.expiration-card.warning {
+    background: rgba(245, 158, 11, 0.05);
+    border-left-color: #f59e0b;
+}
+
+.expiration-card.critical {
+    background: rgba(239, 68, 68, 0.05);
+    border-left-color: #ef4444;
+}
+
+.expiration-card.expired {
+    background: rgba(239, 68, 68, 0.1);
+    border-left-color: #ef4444;
+}
+
+.expiration-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.expiration-card.active .expiration-icon {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+.expiration-card.warning .expiration-icon {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.expiration-card.critical .expiration-icon,
+.expiration-card.expired .expiration-icon {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+/* Alert Box */
+.alert-box {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.alert-box.info {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.alert-box.warning {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.alert-box.danger {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.alert-box i {
+    margin-top: 0.25rem;
+}
+
+.alert-box.info i { color: #3b82f6; }
+.alert-box.warning i { color: #f59e0b; }
+.alert-box.danger i { color: #ef4444; }
+
+.alert-box strong {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.alert-box p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Action Grid */
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--accent-primary);
+}
+
+.action-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.action-content {
+    flex: 1;
+}
+
+.action-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.action-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Port Forward Item */
+.port-forward-item {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.port-forward-item:last-child {
+    border-bottom: none;
+}
+
+.port-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+/* Table Modern */
+.table-modern {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-modern thead {
+    background: var(--bg-secondary);
+}
+
+.table-modern th {
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.table-modern td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table-modern tr:hover {
+    background: var(--bg-secondary);
+}
+
+/* Danger Zone */
+.danger-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.danger-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.danger-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.danger-desc {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Empty States */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    margin-bottom: 1.5rem;
+}
+
+.empty-state-small {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.empty-state-small .empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--text-secondary);
+}
+
+.empty-state-small h4 {
+    margin-bottom: 0.5rem;
+}
+
+.empty-state-small p {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Copy Button */
+.copy-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.copy-btn:hover {
+    background: var(--accent-primary-hover);
+}
+
+/* Pulse Badge */
+.pulse-badge {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    width: 80px;
+    height: 80px;
+    position: relative;
+}
+
+.spinner {
+    width: 100%;
+    height: 100%;
+    border: 4px solid var(--bg-tertiary);
+    border-top: 4px solid var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Password Strength Indicator */
+.password-strength {
+    margin-top: 0.5rem;
+}
+
+.strength-bar {
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.strength-progress {
+    height: 100%;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    border-radius: 2px;
+}
+
+.strength-progress.weak {
+    background: #ef4444;
+    width: 25%;
+}
+
+.strength-progress.fair {
+    background: #f59e0b;
+    width: 50%;
+}
+
+.strength-progress.good {
+    background: #3b82f6;
+    width: 75%;
+}
+
+.strength-progress.strong {
+    background: #10b981;
+    width: 100%;
+}
+
+.strength-text {
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.strength-text.weak {
+    color: #ef4444;
+}
+
+.strength-text.fair {
+    color: #f59e0b;
+}
+
+.strength-text.good {
+    color: #3b82f6;
+}
+
+.strength-text.strong {
+    color: #10b981;
+}
+
+/* Password Match Indicator */
+.password-match {
+    margin-top: 0.5rem;
+}
+
+.match-text.match {
+    color: var(--accent-success);
+}
+
+.match-text.no-match {
+    color: var(--accent-danger);
+}
+
+/* Performance Monitoring Styles */
+.performance-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.perf-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.perf-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.perf-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.network-icon {
+    background: rgba(139, 69, 19, 0.1);
+    color: #8b4513;
+}
+
+.process-icon {
+    background: rgba(75, 0, 130, 0.1);
+    color: #4b0082;
+}
+
+.load-icon {
+    background: rgba(255, 20, 147, 0.1);
+    color: #ff1493;
+}
+
+.perf-stat-content {
+    flex: 1;
+}
+
+.perf-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.perf-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.perf-stat-trend {
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.perf-stat-trend.up {
+    color: var(--accent-danger);
+}
+
+.perf-stat-trend.down {
+    color: var(--accent-success);
+}
+
+.perf-stat-trend.stable {
+    color: var(--text-secondary);
+}
+
+/* Charts Grid */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 2rem;
+}
+
+.chart-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: all 0.2s ease;
+}
+
+.chart-container:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.chart-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chart-wrapper {
+    height: 250px;
+    position: relative;
+}
+
+/* Auto Refresh Toggle */
+.auto-refresh-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.auto-refresh-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-primary);
+}
+
+/* Time Range Selector */
+#timeRange {
+    min-width: 120px;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+/* Chart Loading State */
+.chart-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 250px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.chart-loading i {
+    margin-right: 0.5rem;
+    animation: spin 1s linear infinite;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .performance-stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .performance-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+        padding: 1rem;
+    }
+    
+    .chart-wrapper {
+        height: 200px;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .grid-2, .grid-3 {
+        grid-template-columns: 1fr;
+    }
+    
+    .action-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tabs-modern {
+        overflow-x: auto;
+    }
+}
+
+/* Connection Issue Styling */
+.connection-issue {
+    opacity: 0.7;
+    position: relative;
+}
+
+.connection-issue::after {
+    content: '⚠';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff6b35;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Circuit Breaker Styling */
+.circuit-open {
+    opacity: 0.6;
+    position: relative;
+}
+
+.circuit-open::after {
+    content: '🔴';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse-warning 2s infinite;
+}
+
+/* Server Error Styling */
+.server-error {
+    opacity: 0.5;
+    position: relative;
+}
+
+.server-error::after {
+    content: '❌';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #6c757d;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse-error 1.5s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.9; }
+}
+
+@keyframes pulse-error {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+}
+
+#connectionStatus {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 0.9rem;
+    display: none;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const vpsId = {{ vps.id }};
+let cpuChart, ramChart, networkChart, diskIOChart, loadChart, processChart;
+let currentTimeRange = '1h';
+let autoRefreshEnabled = true;
+let autoRefreshInterval;
+let metricsHistory = [];
+let previousMetrics = null;
+
+// Chart colors
+const chartColors = {
+    cpu: '#3b82f6',
+    ram: '#10b981',
+    disk: '#f59e0b',
+    networkRx: '#3b82f6',
+    networkTx: '#f59e0b',
+    diskRead: '#8b5cf6',
+    diskWrite: '#ef4444',
+    load1: '#06b6d4',
+    load5: '#84cc16',
+    load15: '#f97316',
+    processes: '#6366f1'
+};
+
+// Tab switching
+function showTab(tabName) {
+    document.querySelectorAll('.tab-modern').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    
+    document.querySelector(`.tab-modern[onclick="showTab('${tabName}')"]`).classList.add('active');
+    document.getElementById(`tab-${tabName}`).style.display = 'block';
+    
+    // Initialize charts when performance tab is shown
+    if (tabName === 'performance' && !cpuChart) {
+        setTimeout(initCharts, 100);
+    }
+}
+
+// VPS Control
+async function controlVPS(vpsId, action) {
+    if (!confirm(`Are you sure you want to ${action} this VPS?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/control/${action}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast(data.error || 'Operation failed', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to control VPS: ' + error.message, 'error');
+    }
+}
+
+// Modal functions
+function showModal(modalId) {
+    document.getElementById(modalId).classList.add('show');
+}
+
+function hideModal(modalId) {
+    document.getElementById(modalId).classList.remove('show');
+}
+
+function showAddPortModal() {
+    showModal('addPortModal');
+}
+
+// IP management has moved to the dedicated admin page /vps/<id>/ipconfig.
+
+
+
+function showReinstallModal() {
+    showModal('reinstallModal');
+}
+
+function showRenameModal() {
+    showModal('renameModal');
+}
+
+function showBandwidthQuotaModal() {
+    showModal('bandwidthQuotaModal');
+}
+
+async function updateBandwidthQuota() {
+    const quotaGb = parseInt(document.getElementById('bandwidthQuota').value) || 0;
+    const resetUsage = document.getElementById('resetUsage').checked;
+    
+    // Validate inputs
+    if (quotaGb < 0 || quotaGb > 10000) {
+        showToast('Bandwidth quota must be between 0 and 10000 GB', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/bandwidth-quota`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                quota_gb: quotaGb,
+                reset_usage: resetUsage
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            hideModal('bandwidthQuotaModal');
+            showToast('Bandwidth quota updated successfully', 'success');
+            // Refresh the page to show updated quota
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showToast(data.error || 'Failed to update bandwidth quota', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to update bandwidth quota: ' + error.message, 'error');
+    }
+}
+
+// Copy to clipboard
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    element.select();
+    element.setSelectionRange(0, 99999);
+    document.execCommand('copy');
+    showToast('Copied to clipboard!', 'success');
+}
+
+// Generate SSH Session
+async function generateSSH() {
+    // Show loading modal
+    showModal('sshLoadingModal');
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/ssh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        // Hide loading modal
+        hideModal('sshLoadingModal');
+        
+        if (data.success) {
+            document.getElementById('sshCommand').value = data.ssh_url || '';
+            document.getElementById('webUrl').value = data.web_url || '';
+            document.getElementById('webSshLink').href = data.web_url || '#';
+            showModal('sshModal');
+            showToast('SSH session generated successfully', 'success');
+        } else {
+            showToast(data.error || 'Failed to generate SSH session', 'error');
+        }
+    } catch (error) {
+        hideModal('sshLoadingModal');
+        showToast('Failed to generate SSH: ' + error.message, 'error');
+    }
+}
+
+// Toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle';
+    const color = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+    
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <i class="fas fa-${icon}" style="color: ${color}; font-size: 1.25rem;"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Add Port
+async function addPort() {
+    const vpsPort = document.getElementById('vpsPort').value;
+    const protocol = document.getElementById('portProtocol').value;
+    const description = document.getElementById('portDescription').value;
+    
+    if (!vpsPort) {
+        showToast('Please enter a VPS port', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/ports/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                vps_id: vpsId,
+                vps_port: parseInt(vpsPort),
+                protocol: protocol,
+                description: description
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Port forward added successfully', 'success');
+            hideModal('addPortModal');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to add port forward', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to add port: ' + error.message, 'error');
+    }
+}
+
+// Remove Port
+async function removePort(forwardId) {
+    if (!confirm('Are you sure you want to remove this port forward?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/ports/remove/${forwardId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Port forward removed successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to remove port forward', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to remove port: ' + error.message, 'error');
+    }
+}
+
+// Reinstall VPS
+async function reinstallVPS() {
+    const osVersion = document.getElementById('osVersion').value;
+    const osText = document.getElementById('osVersion').selectedOptions[0].text;
+    
+    // Show a more detailed confirmation with countdown
+    const confirmResult = await showReinstallConfirmation(osText);
+    if (!confirmResult) {
+        return;
+    }
+    
+    // Hide the reinstall modal
+    hideModal('reinstallModal');
+    showLoading();
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/reinstall`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ os_version: osVersion })
+        });
+        
+        const data = await response.json();
+        
+        hideLoading();
+        
+        if (data.success) {
+            // Redirect to reinstalling page
+            if (data.redirect) {
+                window.location.href = data.redirect;
+            } else {
+                window.location.href = `/vps/${vpsId}/reinstalling`;
+            }
+        } else {
+            showToast(data.error || 'Failed to start reinstallation', 'danger');
+        }
+    } catch (error) {
+        hideLoading();
+        showToast('Failed to start reinstallation: ' + error.message, 'danger');
+    }
+}
+
+// Enhanced confirmation dialog for reinstall
+function showReinstallConfirmation(osText) {
+    return new Promise((resolve) => {
+        const confirmHtml = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 3rem; color: var(--accent-warning); margin-bottom: 1rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h3 style="margin-bottom: 1rem; color: var(--accent-danger);">Confirm VPS Reinstallation</h3>
+                <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                    You are about to reinstall this VPS with <strong>${osText}</strong>.<br>
+                    <strong style="color: var(--accent-danger);">This will permanently delete ALL data on the VPS!</strong>
+                </p>
+                <div class="alert-box danger" style="margin-bottom: 1.5rem; text-align: left;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <strong>This action cannot be undone!</strong>
+                        <ul style="margin: 0.5rem 0 0 0; padding-left: 1rem;">
+                            <li>All files and data will be lost</li>
+                            <li>All installed software will be removed</li>
+                            <li>The VPS will be reset to a fresh installation</li>
+                        </ul>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button class="btn btn-outline" id="cancelReinstall">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button class="btn btn-danger" id="confirmReinstall">
+                        <i class="fas fa-redo-alt"></i> Yes, Reinstall VPS
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Create temporary modal
+        const tempModal = document.createElement('div');
+        tempModal.className = 'modal show';
+        tempModal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                ${confirmHtml}
+            </div>
+        `;
+        
+        // Add event listeners to buttons
+        const cancelBtn = tempModal.querySelector('#cancelReinstall');
+        const confirmBtn = tempModal.querySelector('#confirmReinstall');
+        
+        cancelBtn.onclick = () => { 
+            document.body.removeChild(tempModal); 
+            resolve(false); 
+        };
+        
+        confirmBtn.onclick = () => { 
+            document.body.removeChild(tempModal); 
+            resolve(true); 
+        };
+        
+        document.body.appendChild(tempModal);
+    });
+}
+
+// Rename VPS
+async function renameVPS() {
+    const newHostname = document.getElementById('newHostname').value.trim();
+    
+    if (!newHostname) {
+        showToast('Please enter a hostname', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/rename`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ hostname: newHostname })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('VPS renamed successfully', 'success');
+            hideModal('renameModal');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to rename VPS', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to rename: ' + error.message, 'error');
+    }
+}
+
+// Password Management Functions
+let currentPassword = '';
+let passwordVisible = false;
+
+// Load current password on page load
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('tab-settings')) {
+        loadCurrentPassword();
+    }
+    
+    // Initialize live metrics updates if VPS is running
+    {% if stats.status == 'running' %}
+    if (document.getElementById('liveCpuValue')) {
+        // Start live metrics updates
+        updateLiveMetrics(); // Initial update
+        window.metricsInterval = setInterval(updateLiveMetrics, 10000); // Every 10 seconds
+        
+        console.log('Live metrics updates initialized');
+    }
+    {% endif %}
+});
+
+// Load current VPS password
+async function loadCurrentPassword() {
+    try {
+        const response = await fetch(`/vps/${vpsId}/password`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentPassword = data.password || 'root';
+            document.getElementById('currentPasswordDisplay').value = '••••••••••••';
+            
+            // Update password source information
+            const sourceEl = document.getElementById('passwordSource');
+            if (sourceEl) {
+                let sourceText = `Source: ${data.source || 'database'}`;
+                if (data.container_status) {
+                    sourceText += ` | VPS Status: ${data.container_status}`;
+                }
+                sourceEl.innerHTML = `<i class="fas fa-info-circle"></i> ${sourceText}`;
+            }
+        } else {
+            document.getElementById('currentPasswordDisplay').value = 'Error loading';
+            const sourceEl = document.getElementById('passwordSource');
+            if (sourceEl) {
+                sourceEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.error || 'Failed to load password'}`;
+                sourceEl.style.color = 'var(--accent-danger)';
+            }
+        }
+    } catch (error) {
+        console.error('Load password error:', error);
+        document.getElementById('currentPasswordDisplay').value = 'Error loading';
+        const sourceEl = document.getElementById('passwordSource');
+        if (sourceEl) {
+            sourceEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Failed to load password`;
+            sourceEl.style.color = 'var(--accent-danger)';
+        }
+    }
+}
+
+// Refresh password from VPS
+async function refreshPassword() {
+    const refreshBtn = document.querySelector('button[onclick="refreshPassword()"]');
+    const originalContent = refreshBtn.innerHTML;
+    
+    refreshBtn.disabled = true;
+    refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/password/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentPassword = data.password || 'root';
+            
+            // Update display based on current visibility state
+            const input = document.getElementById('currentPasswordDisplay');
+            if (passwordVisible) {
+                input.value = currentPassword;
+            } else {
+                input.value = '••••••••••••';
+            }
+            
+            // Update password source information
+            const sourceEl = document.getElementById('passwordSource');
+            if (sourceEl) {
+                let sourceText = `Source: ${data.source || 'database'}`;
+                if (data.container_status) {
+                    sourceText += ` | VPS Status: ${data.container_status}`;
+                }
+                sourceEl.innerHTML = `<i class="fas fa-sync-alt"></i> ${sourceText} (refreshed)`;
+                sourceEl.style.color = 'var(--text-secondary)';
+            }
+            
+            showToast(data.note || 'Password refreshed successfully', 'success');
+        } else {
+            showToast(data.error || 'Failed to refresh password', 'error');
+        }
+    } catch (error) {
+        console.error('Refresh password error:', error);
+        showToast('Failed to refresh password. Please try again.', 'error');
+    } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = originalContent;
+    }
+}
+
+// Toggle password visibility
+function togglePasswordVisibility() {
+    const input = document.getElementById('currentPasswordDisplay');
+    const icon = document.getElementById('passwordToggleIcon');
+    
+    if (!currentPassword) {
+        showToast('Password not loaded yet', 'warning');
+        return;
+    }
+    
+    passwordVisible = !passwordVisible;
+    
+    if (passwordVisible) {
+        input.type = 'text';
+        input.value = currentPassword;
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        input.type = 'password';
+        input.value = '••••••••••••';
+        icon.className = 'fas fa-eye';
+    }
+}
+
+// Copy password to clipboard
+function copyPassword() {
+    if (!currentPassword) {
+        showToast('No password to copy', 'warning');
+        return;
+    }
+    
+    navigator.clipboard.writeText(currentPassword).then(() => {
+        showToast('Password copied to clipboard', 'success');
+    }).catch(() => {
+        showToast('Failed to copy password', 'danger');
+    });
+}
+
+// Change VPS password
+async function changeVPSPassword(event) {
+    event.preventDefault();
+    
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const changeBtn = document.getElementById('changePasswordBtn');
+    
+    // Validate passwords match
+    if (newPassword !== confirmPassword) {
+        showToast('Passwords do not match', 'warning');
+        return;
+    }
+    
+    // Validate password length
+    if (newPassword.length < 8) {
+        showToast('Password must be at least 8 characters', 'warning');
+        return;
+    }
+    
+    if (newPassword.length > 128) {
+        showToast('Password must be less than 128 characters', 'warning');
+        return;
+    }
+    
+    // Check password strength
+    const strength = getPasswordStrength(newPassword);
+    if (strength.score < 2) {
+        if (!confirm('This password is weak. Are you sure you want to use it?')) {
+            return;
+        }
+    }
+    
+    // Disable button and show loading
+    changeBtn.disabled = true;
+    changeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Changing Password...';
+    
+    try {
+        const response = await fetch(`/vps/${vpsId}/password/change`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ password: newPassword })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentPassword = newPassword;
+            
+            // Update display based on current visibility state
+            const input = document.getElementById('currentPasswordDisplay');
+            if (passwordVisible) {
+                input.value = currentPassword;
+            } else {
+                input.value = '••••••••••••';
+            }
+            
+            // Clear form
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            
+            // Hide strength indicators
+            document.getElementById('passwordStrength').style.display = 'none';
+            document.getElementById('passwordMatch').style.display = 'none';
+            
+            // Show success message with additional info
+            let message = data.message || 'Password changed successfully';
+            if (!data.changed_in_container) {
+                message += ' (VPS was not running - password will be applied when VPS starts)';
+            }
+            showToast(message, 'success');
+            
+            // Update password source
+            const sourceEl = document.getElementById('passwordSource');
+            if (sourceEl) {
+                sourceEl.innerHTML = `<i class="fas fa-check-circle"></i> Password updated | VPS Status: ${data.container_status || 'unknown'}`;
+                sourceEl.style.color = 'var(--accent-success)';
+            }
+        } else {
+            showToast(data.error || 'Failed to change password', 'error');
+        }
+    } catch (error) {
+        console.error('Change password error:', error);
+        showToast('Failed to change password. Please try again.', 'error');
+    } finally {
+        // Re-enable button
+        changeBtn.disabled = false;
+        changeBtn.innerHTML = '<i class="fas fa-save"></i> Change Password';
+    }
+}
+
+// Generate secure password
+async function generatePassword() {
+    try {
+        const response = await fetch(`/vps/${vpsId}/password/generate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const newPasswordField = document.getElementById('newPassword');
+            const confirmPasswordField = document.getElementById('confirmPassword');
+            
+            newPasswordField.value = data.password;
+            confirmPasswordField.value = data.password;
+            
+            // Trigger strength check
+            checkPasswordStrength();
+            checkPasswordMatch();
+            
+            showToast(`Secure password generated (${data.length} characters)`, 'success');
+        } else {
+            showToast(data.error || 'Failed to generate password', 'error');
+        }
+    } catch (error) {
+        console.error('Generate password error:', error);
+        showToast('Failed to generate password', 'error');
+    }
+}
+
+// Check password strength
+function checkPasswordStrength() {
+    const password = document.getElementById('newPassword').value;
+    const strengthContainer = document.getElementById('passwordStrength');
+    const strengthProgress = document.getElementById('strengthProgress');
+    const strengthText = document.getElementById('strengthText');
+    
+    if (!password) {
+        strengthContainer.style.display = 'none';
+        return;
+    }
+    
+    const strength = getPasswordStrength(password);
+    strengthContainer.style.display = 'block';
+    
+    // Remove all classes
+    strengthProgress.className = 'strength-progress';
+    strengthText.className = 'strength-text';
+    
+    // Add appropriate class
+    strengthProgress.classList.add(strength.level);
+    strengthText.classList.add(strength.level);
+    
+    strengthText.innerHTML = `<i class="fas ${strength.icon}"></i> ${strength.text}`;
+}
+
+// Get password strength
+function getPasswordStrength(password) {
+    let score = 0;
+    let feedback = [];
+    
+    // Length check
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    
+    // Character variety
+    if (/[a-z]/.test(password)) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+    
+    // Common patterns (negative points)
+    if (/(.)\1{2,}/.test(password)) score--; // Repeated characters
+    if (/123|abc|qwe/i.test(password)) score--; // Sequential patterns
+    
+    // Weak passwords
+    const weakPasswords = ['password', '12345678', 'qwerty123', 'admin123', 'root1234'];
+    if (weakPasswords.includes(password.toLowerCase())) score = 0;
+    
+    if (score <= 1) {
+        return { score, level: 'weak', text: 'Weak - Add more variety', icon: 'fa-times-circle' };
+    } else if (score <= 3) {
+        return { score, level: 'fair', text: 'Fair - Could be stronger', icon: 'fa-exclamation-circle' };
+    } else if (score <= 5) {
+        return { score, level: 'good', text: 'Good - Well balanced', icon: 'fa-check-circle' };
+    } else {
+        return { score, level: 'strong', text: 'Strong - Excellent security', icon: 'fa-shield-alt' };
+    }
+}
+
+// Check password match
+function checkPasswordMatch() {
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const matchContainer = document.getElementById('passwordMatch');
+    const matchText = document.getElementById('matchText');
+    
+    if (!confirmPassword) {
+        matchContainer.style.display = 'none';
+        return;
+    }
+    
+    matchContainer.style.display = 'block';
+    matchText.className = '';
+    
+    if (newPassword === confirmPassword) {
+        matchText.className = 'match-text match';
+        matchText.innerHTML = '<i class="fas fa-check-circle"></i> Passwords match';
+    } else {
+        matchText.className = 'match-text no-match';
+        matchText.innerHTML = '<i class="fas fa-times-circle"></i> Passwords do not match';
+    }
+}
+
+// Delete VPS
+async function deleteVPS() {
+    if (!confirm('Are you sure you want to delete this VPS? This action cannot be undone!')) {
+        return;
+    }
+    
+    if (!confirm('This will permanently delete all data. Are you absolutely sure?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/vps/${vpsId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('VPS deleted successfully', 'success');
+            setTimeout(() => window.location.href = '/vps', 2000);
+        } else {
+            showToast(data.error || 'Failed to delete VPS', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to delete VPS: ' + error.message, 'error');
+    }
+}
+
+// Suspend VPS
+async function suspendVPS() {
+    if (!confirm('Are you sure you want to suspend this VPS?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/vps/${vpsId}/suspend`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('VPS suspended successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to suspend VPS', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to suspend VPS: ' + error.message, 'error');
+    }
+}
+
+// Initialize Charts
+function initCharts() {
+    const chartConfig = {
+        type: 'line',
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20,
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary')
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--border-color')
+                    },
+                    ticks: {
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary')
+                    }
+                },
+                x: {
+                    grid: {
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--border-color')
+                    },
+                    ticks: {
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary'),
+                        maxTicksLimit: 10
+                    }
+                }
+            },
+            elements: {
+                point: {
+                    radius: 3,
+                    hoverRadius: 6
+                },
+                line: {
+                    tension: 0.4,
+                    borderWidth: 2
+                }
+            }
+        }
+    };
+    
+    // CPU Chart
+    const cpuCtx = document.getElementById('cpuChart');
+    if (cpuCtx) {
+        cpuChart = new Chart(cpuCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'CPU Usage (%)',
+                    data: [],
+                    borderColor: chartColors.cpu,
+                    backgroundColor: chartColors.cpu + '20',
+                    fill: true
+                }]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    ...chartConfig.options.scales,
+                    y: {
+                        ...chartConfig.options.scales.y,
+                        max: 100,
+                        ticks: {
+                            ...chartConfig.options.scales.y.ticks,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // RAM Chart
+    const ramCtx = document.getElementById('ramChart');
+    if (ramCtx) {
+        ramChart = new Chart(ramCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'RAM Usage (%)',
+                    data: [],
+                    borderColor: chartColors.ram,
+                    backgroundColor: chartColors.ram + '20',
+                    fill: true
+                }]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    ...chartConfig.options.scales,
+                    y: {
+                        ...chartConfig.options.scales.y,
+                        max: 100,
+                        ticks: {
+                            ...chartConfig.options.scales.y.ticks,
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Network Chart
+    const networkCtx = document.getElementById('networkChart');
+    if (networkCtx) {
+        networkChart = new Chart(networkCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'RX (Received)',
+                        data: [],
+                        borderColor: chartColors.networkRx,
+                        backgroundColor: chartColors.networkRx + '20',
+                        fill: true
+                    },
+                    {
+                        label: 'TX (Transmitted)',
+                        data: [],
+                        borderColor: chartColors.networkTx,
+                        backgroundColor: chartColors.networkTx + '20',
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    ...chartConfig.options.scales,
+                    y: {
+                        ...chartConfig.options.scales.y,
+                        ticks: {
+                            ...chartConfig.options.scales.y.ticks,
+                            callback: function(value) {
+                                return formatBytes(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Disk I/O Chart
+    const diskIOCtx = document.getElementById('diskIOChart');
+    if (diskIOCtx) {
+        diskIOChart = new Chart(diskIOCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Disk Read',
+                        data: [],
+                        borderColor: chartColors.diskRead,
+                        backgroundColor: chartColors.diskRead + '20',
+                        fill: true
+                    },
+                    {
+                        label: 'Disk Write',
+                        data: [],
+                        borderColor: chartColors.diskWrite,
+                        backgroundColor: chartColors.diskWrite + '20',
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    ...chartConfig.options.scales,
+                    y: {
+                        ...chartConfig.options.scales.y,
+                        ticks: {
+                            ...chartConfig.options.scales.y.ticks,
+                            callback: function(value) {
+                                return formatBytes(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Load Average Chart
+    const loadCtx = document.getElementById('loadChart');
+    if (loadCtx) {
+        loadChart = new Chart(loadCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: '1 min',
+                        data: [],
+                        borderColor: chartColors.load1,
+                        backgroundColor: chartColors.load1 + '20',
+                        fill: false
+                    },
+                    {
+                        label: '5 min',
+                        data: [],
+                        borderColor: chartColors.load5,
+                        backgroundColor: chartColors.load5 + '20',
+                        fill: false
+                    },
+                    {
+                        label: '15 min',
+                        data: [],
+                        borderColor: chartColors.load15,
+                        backgroundColor: chartColors.load15 + '20',
+                        fill: false
+                    }
+                ]
+            }
+        });
+    }
+    
+    // Process Count Chart
+    const processCtx = document.getElementById('processChart');
+    if (processCtx) {
+        processChart = new Chart(processCtx, {
+            ...chartConfig,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Process Count',
+                    data: [],
+                    borderColor: chartColors.processes,
+                    backgroundColor: chartColors.processes + '20',
+                    fill: true
+                }]
+            },
+            options: {
+                ...chartConfig.options,
+                scales: {
+                    ...chartConfig.options.scales,
+                    y: {
+                        ...chartConfig.options.scales.y,
+                        ticks: {
+                            ...chartConfig.options.scales.y.ticks,
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Load historical data and start auto-refresh
+    loadHistoricalData();
+    if (autoRefreshEnabled) {
+        startAutoRefresh();
+    }
+}
+
+// Load historical data
+async function loadHistoricalData() {
+    try {
+        const response = await fetch(`/vps/${vpsId}/metrics/history?range=${currentTimeRange}`);
+        const data = await response.json();
+        
+        if (data.success && data.metrics) {
+            metricsHistory = data.metrics;
+            updateChartsWithHistoricalData();
+        }
+    } catch (error) {
+        console.error('Failed to load historical data:', error);
+    }
+}
+
+// Update charts with historical data
+function updateChartsWithHistoricalData() {
+    const labels = metricsHistory.map(m => formatTimestamp(m.timestamp));
+    
+    // Update CPU Chart
+    if (cpuChart) {
+        cpuChart.data.labels = labels;
+        cpuChart.data.datasets[0].data = metricsHistory.map(m => m.cpu || 0);
+        cpuChart.update('none');
+    }
+    
+    // Update RAM Chart
+    if (ramChart) {
+        ramChart.data.labels = labels;
+        ramChart.data.datasets[0].data = metricsHistory.map(m => m.ram || 0);
+        ramChart.update('none');
+    }
+    
+    // Update Network Chart
+    if (networkChart) {
+        networkChart.data.labels = labels;
+        networkChart.data.datasets[0].data = metricsHistory.map(m => m.network_rx || 0);
+        networkChart.data.datasets[1].data = metricsHistory.map(m => m.network_tx || 0);
+        networkChart.update('none');
+    }
+    
+    // Update Disk I/O Chart
+    if (diskIOChart) {
+        diskIOChart.data.labels = labels;
+        diskIOChart.data.datasets[0].data = metricsHistory.map(m => m.disk_read || 0);
+        diskIOChart.data.datasets[1].data = metricsHistory.map(m => m.disk_write || 0);
+        diskIOChart.update('none');
+    }
+    
+    // Update Load Chart
+    if (loadChart) {
+        loadChart.data.labels = labels;
+        loadChart.data.datasets[0].data = metricsHistory.map(m => m.load_1min || 0);
+        loadChart.data.datasets[1].data = metricsHistory.map(m => m.load_5min || 0);
+        loadChart.data.datasets[2].data = metricsHistory.map(m => m.load_15min || 0);
+        loadChart.update('none');
+    }
+    
+    // Update Process Chart
+    if (processChart) {
+        processChart.data.labels = labels;
+        processChart.data.datasets[0].data = metricsHistory.map(m => m.processes || 0);
+        processChart.update('none');
+    }
+}
+
+// Get live metrics and update displays with improved error handling
+let metricsErrorCount = 0;
+const maxMetricsErrors = 3;
+
+async function updateLiveMetrics() {
+    try {
+        const response = await fetch(`/vps/${vpsId}/metrics/live`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            // Increased timeout for remote nodes
+            signal: AbortSignal.timeout(20000) // 20 second timeout (increased from 12s)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Reset error count on successful response
+        metricsErrorCount = 0;
+        
+        // Reset to normal update frequency if it was reduced
+        if (window.metricsInterval && window.metricsInterval._destroyed !== true) {
+            const currentInterval = window.metricsInterval;
+            // Check if we're running on reduced frequency (anything > 12 seconds)
+            if (currentInterval && currentInterval._idleTimeout > 12000) {
+                clearInterval(currentInterval);
+                window.metricsInterval = setInterval(updateLiveMetrics, 10000); // Back to 10 seconds
+                console.log('Connection restored - Reset to normal update frequency');
+            }
+        }
+        
+        if (data.success && data.stats) {
+            const stats = data.stats;
+            
+            // Handle node health information if available
+            if (data.node_health) {
+                const nodeHealth = data.node_health;
+                console.log('Node health status:', nodeHealth.status);
+                
+                // Show specific messages for different node health states
+                if (nodeHealth.status === 'http_500_circuit_open') {
+                    showToast(`Remote node experiencing server errors (Circuit breaker active)`, 'warning');
+                } else if (nodeHealth.status === 'circuit_open') {
+                    showToast(`Node temporarily unavailable (Circuit breaker active)`, 'warning');
+                } else if (nodeHealth.status === 'degraded') {
+                    console.warn(`Node health degraded: ${nodeHealth.message || 'Unknown issue'}`);
+                }
+            }
+            
+            // Update live stat cards
+            updateLiveStatCards(stats);
+            
+            // Update trends
+            if (previousMetrics) {
+                updateTrends(stats, previousMetrics);
+            }
+            
+            // Store for next comparison
+            previousMetrics = stats;
+            
+            // Update resource cards in overview tab
+            updateResourceCards(stats);
+        } else if (data.stats) {
+            // Even if not successful, try to update with available stats
+            updateLiveStatCards(data.stats);
+            updateResourceCards(data.stats);
+        } else {
+            console.warn('No stats data received from metrics endpoint');
+        }
+    } catch (error) {
+        metricsErrorCount++;
+        console.warn(`Live metrics update failed (${metricsErrorCount}/${maxMetricsErrors}):`, error.message);
+        
+        // Different handling based on error type
+        const isTimeoutError = error.name === 'TimeoutError' || error.message.includes('timeout');
+        const isNetworkError = error.message.includes('Failed to fetch') || error.message.includes('NetworkError');
+        
+        // If too many consecutive errors, show warning and adjust behavior
+        if (metricsErrorCount >= maxMetricsErrors) {
+            if (isTimeoutError) {
+                console.error('Persistent timeout issues, reducing update frequency');
+                showToast('Connection timeouts detected - Reducing update frequency', 'warning');
+                
+                // Reduce update frequency for timeouts
+                if (window.metricsInterval) {
+                    clearInterval(window.metricsInterval);
+                    window.metricsInterval = setInterval(updateLiveMetrics, 20000); // 20 seconds
+                }
+            } else if (isNetworkError) {
+                console.error('Network connectivity issues detected');
+                showToast('Network connectivity issues - Metrics temporarily unavailable', 'error');
+                
+                // Longer interval for network issues
+                if (window.metricsInterval) {
+                    clearInterval(window.metricsInterval);
+                    window.metricsInterval = setInterval(updateLiveMetrics, 30000); // 30 seconds
+                }
+            } else {
+                console.error('Too many metrics errors, reducing update frequency');
+                showToast('Live metrics temporarily unavailable', 'warning');
+                
+                // Standard reduced frequency
+                if (window.metricsInterval) {
+                    clearInterval(window.metricsInterval);
+                    window.metricsInterval = setInterval(updateLiveMetrics, 25000); // 25 seconds
+                }
+            }
+        }
+    }
+}
+
+// Update live stat cards with enhanced status handling
+function updateLiveStatCards(stats) {
+    try {
+        // Check for different types of connection issues
+        const hasConnectionIssue = ['timeout', 'error', 'unknown', 'server_error', 'circuit_open', 'connection_error', 'timeout_cached', 'connection_error_cached', 'circuit_open_cached'].includes(stats.status);
+        const hasCachedData = ['timeout_cached', 'connection_error_cached', 'circuit_open_cached'].includes(stats.status);
+        const isCircuitOpen = stats.status === 'circuit_open' || stats.status === 'circuit_open_cached';
+        const isServerError = stats.status === 'server_error';
+        
+        // Update status indicator if it exists
+        const statusIndicator = document.querySelector('.status-badge-premium, .status-badge');
+        if (statusIndicator) {
+            statusIndicator.classList.remove('connection-issue', 'circuit-open', 'server-error');
+            
+            if (isCircuitOpen) {
+                statusIndicator.classList.add('circuit-open');
+                statusIndicator.title = 'Circuit breaker open - Node experiencing issues';
+            } else if (isServerError) {
+                statusIndicator.classList.add('server-error');
+                statusIndicator.title = 'Remote node server error (HTTP 500)';
+            } else if (hasConnectionIssue) {
+                statusIndicator.classList.add('connection-issue');
+                statusIndicator.title = 'Connection issue with remote node';
+            } else {
+                statusIndicator.title = '';
+            }
+        }
+        
+        // Show connection status message
+        let connectionMessage = '';
+        if (isCircuitOpen) {
+            if (hasCachedData) {
+                connectionMessage = 'Circuit breaker active - Showing cached data';
+            } else {
+                connectionMessage = 'Circuit breaker active - Node temporarily unavailable';
+            }
+        } else if (isServerError) {
+            connectionMessage = 'Remote node experiencing server errors';
+        } else if (stats.status === 'timeout_cached') {
+            connectionMessage = 'Connection timeout - Showing cached data';
+        } else if (stats.status === 'timeout') {
+            connectionMessage = 'Connection timeout - Node may be overloaded or unreachable';
+        } else if (stats.status === 'connection_error_cached') {
+            connectionMessage = 'Communication error - Showing cached data';
+        } else if (stats.status === 'connection_error' || stats.status === 'error') {
+            connectionMessage = 'Communication error with remote node';
+        } else if (hasCachedData) {
+            connectionMessage = 'Connection issues detected - Showing cached data';
+        } else if (hasConnectionIssue) {
+            connectionMessage = 'Connection issues detected - Live data unavailable';
+        }
+        
+        // Update or create connection status message
+        let statusMessage = document.getElementById('connectionStatusMessage');
+        if (connectionMessage) {
+            if (!statusMessage) {
+                statusMessage = document.createElement('div');
+                statusMessage.id = 'connectionStatusMessage';
+                statusMessage.className = 'alert alert-warning mt-2';
+                statusMessage.style.fontSize = '0.9em';
+                
+                const metricsContainer = document.querySelector('.performance-metrics-container');
+                if (metricsContainer) {
+                    metricsContainer.insertBefore(statusMessage, metricsContainer.firstChild);
+                }
+            }
+            statusMessage.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${connectionMessage}`;
+            statusMessage.style.display = 'block';
+        } else if (statusMessage) {
+            statusMessage.style.display = 'none';
+        }
+        
+        // CPU
+        const cpuValue = document.getElementById('liveCpuValue');
+        if (cpuValue) {
+            if (hasConnectionIssue) {
+                cpuValue.textContent = 'N/A';
+                cpuValue.title = connectionMessage || 'Unable to fetch data';
+            } else {
+                cpuValue.textContent = `${(stats.cpu || 0).toFixed(1)}%`;
+                cpuValue.title = '';
+            }
+        }
+        
+        // RAM
+        const ramValue = document.getElementById('liveRamValue');
+        if (ramValue) {
+            if (hasConnectionIssue) {
+                ramValue.textContent = 'N/A';
+                ramValue.title = connectionMessage || 'Unable to fetch data';
+            } else {
+                ramValue.textContent = `${(stats.ram?.pct || 0).toFixed(1)}%`;
+                ramValue.title = '';
+            }
+        }
+        
+        // Disk
+        const diskValue = document.getElementById('liveDiskValue');
+        if (diskValue) {
+            if (hasConnectionIssue) {
+                diskValue.textContent = 'N/A';
+                diskValue.title = connectionMessage || 'Unable to fetch data';
+            } else {
+                diskValue.textContent = stats.disk?.use_percent || '0%';
+                diskValue.title = '';
+            }
+        }
+        
+        // Network
+        const networkRx = document.getElementById('networkRx');
+        const networkTx = document.getElementById('networkTx');
+        if (networkRx) {
+            networkRx.textContent = hasConnectionIssue ? 'N/A' : (stats.network?.rx || '0 B');
+            networkRx.title = hasConnectionIssue ? (connectionMessage || 'Unable to fetch data') : '';
+        }
+        if (networkTx) {
+            networkTx.textContent = hasConnectionIssue ? 'N/A' : (stats.network?.tx || '0 B');
+            networkTx.title = hasConnectionIssue ? (connectionMessage || 'Unable to fetch data') : '';
+        }
+        
+        // Processes
+        const processValue = document.getElementById('liveProcessValue');
+        if (processValue) {
+            if (hasConnectionIssue) {
+                processValue.textContent = 'N/A';
+                processValue.title = 'Unable to fetch data';
+            } else {
+                processValue.textContent = stats.processes || 0;
+                processValue.title = '';
+            }
+        }
+        
+        // Load Average
+        const load1m = document.getElementById('load1m');
+        const load5m = document.getElementById('load5m');
+        if (load1m) {
+            if (hasConnectionIssue) {
+                load1m.textContent = 'N/A';
+                load1m.title = 'Unable to fetch data';
+            } else {
+                load1m.textContent = (stats.load_average?.['1min'] || 0).toFixed(2);
+                load1m.title = '';
+            }
+        }
+        if (load5m) {
+            if (hasConnectionIssue) {
+                load5m.textContent = 'N/A';
+                load5m.title = 'Unable to fetch data';
+            } else {
+                load5m.textContent = (stats.load_average?.['5min'] || 0).toFixed(2);
+                load5m.title = '';
+            }
+        }
+        
+        // Show connection status message
+        if (hasConnectionIssue) {
+            const connectionMsg = document.getElementById('connectionStatus');
+            if (connectionMsg) {
+                let message = 'Connection issue with remote node';
+                
+                if (stats.status === 'circuit_open_cached') {
+                    message = 'Node temporarily unavailable (Circuit breaker active) - Showing cached data';
+                } else if (stats.status === 'circuit_open') {
+                    message = 'Node temporarily unavailable (Circuit breaker active) - Unable to fetch live data';
+                } else if (stats.status === 'server_error') {
+                    message = 'Remote node experiencing server errors - Unable to fetch live data';
+                } else if (stats.status === 'timeout_cached') {
+                    message = 'Connection timeout to remote node - Showing cached data';
+                } else if (stats.status === 'timeout') {
+                    message = 'Connection timeout to remote node - Unable to fetch live data';
+                } else if (stats.status === 'connection_error_cached') {
+                    message = 'Error communicating with remote node - Showing cached data';
+                } else if (stats.status === 'connection_error' || stats.status === 'error') {
+                    message = 'Error communicating with remote node - Unable to fetch live data';
+                } else if (stats.status === 'unknown') {
+                    message = 'Unable to determine node status - Live data unavailable';
+                } else if (hasCachedData) {
+                    message = 'Connection issue with remote node - Showing cached data';
+                }
+                
+                connectionMsg.textContent = message;
+                connectionMsg.style.display = 'block';
+            }
+        } else {
+            const connectionMsg = document.getElementById('connectionStatus');
+            if (connectionMsg) {
+                connectionMsg.style.display = 'none';
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error updating live stat cards:', error);
+    }
+}
+
+// Update trend indicators
+function updateTrends(current, previous) {
+    updateTrendIndicator('cpuTrend', current.cpu, previous.cpu, '%');
+    updateTrendIndicator('ramTrend', current.ram?.pct, previous.ram?.pct, '%');
+    updateTrendIndicator('processTrend', current.processes, previous.processes, '');
+}
+
+// Update individual trend indicator
+function updateTrendIndicator(elementId, currentValue, previousValue, unit) {
+    const element = document.getElementById(elementId);
+    if (!element || currentValue === undefined || previousValue === undefined) return;
+    
+    const diff = currentValue - previousValue;
+    const icon = element.querySelector('i');
+    const span = element.querySelector('span');
+    
+    element.className = 'perf-stat-trend';
+    
+    if (Math.abs(diff) < 0.1) {
+        element.classList.add('stable');
+        icon.className = 'fas fa-minus';
+        span.textContent = 'Stable';
+    } else if (diff > 0) {
+        element.classList.add('up');
+        icon.className = 'fas fa-arrow-up';
+        span.textContent = `+${diff.toFixed(1)}${unit}`;
+    } else {
+        element.classList.add('down');
+        icon.className = 'fas fa-arrow-down';
+        span.textContent = `${diff.toFixed(1)}${unit}`;
+    }
+}
+
+// Format timestamp for display
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Format bytes for display
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+// Change time range
+function changeTimeRange() {
+    const select = document.getElementById('timeRange');
+    currentTimeRange = select.value;
+    loadHistoricalData();
+}
+
+// Toggle auto refresh
+function toggleAutoRefresh() {
+    const checkbox = document.getElementById('autoRefresh');
+    autoRefreshEnabled = checkbox.checked;
+    
+    if (autoRefreshEnabled) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+}
+
+// Start auto refresh
+function startAutoRefresh() {
+    stopAutoRefresh(); // Clear any existing interval
+    
+    // Update immediately
+    updateLiveMetrics();
+    
+    // Set interval based on time range
+    const intervals = {
+        '1m': 1000,   // 1 second
+        '5m': 2000,   // 2 seconds
+        '10m': 3000,  // 3 seconds
+        '30m': 5000,  // 5 seconds
+        '1h': 10000,  // 10 seconds
+        '6h': 30000,  // 30 seconds
+        '24h': 60000  // 1 minute
+    };
+    
+    const interval = intervals[currentTimeRange] || 10000;
+    autoRefreshInterval = setInterval(() => {
+        updateLiveMetrics();
+        // Reload historical data every 10 updates
+        if (Math.random() < 0.1) {
+            loadHistoricalData();
+        }
+    }, interval);
+}
+
+// Stop auto refresh
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// Refresh Charts
+function refreshCharts() {
+    loadHistoricalData();
+    updateLiveMetrics();
+    showToast('Charts refreshed', 'success');
+}
+
+// Update Resource Cards
+function updateResourceCards(stats) {
+    try {
+        // Safely update CPU
+        const cpuElements = document.querySelectorAll('.vps-cpu[data-id="' + vpsId + '"]');
+        const cpuValue = parseFloat(stats.cpu || 0);
+        cpuElements.forEach(el => {
+            if (el) el.textContent = cpuValue.toFixed(1) + '%';
+        });
+        
+        const cpuProgress = document.querySelector('.cpu-progress');
+        if (cpuProgress) {
+            cpuProgress.style.width = Math.min(cpuValue, 100) + '%';
+        }
+        
+        // Safely update RAM
+        const ramData = stats.ram || {};
+        const ramPct = parseFloat(ramData.pct || 0);
+        const ramUsed = parseInt(ramData.used || 0);
+        const ramTotal = parseInt(ramData.total || 0);
+        
+        const ramPctElements = document.querySelectorAll('.vps-ram-pct[data-id="' + vpsId + '"]');
+        ramPctElements.forEach(el => {
+            if (el) el.textContent = ramPct.toFixed(1) + '%';
+        });
+        
+        const ramUsedElements = document.querySelectorAll('.vps-ram-used[data-id="' + vpsId + '"]');
+        ramUsedElements.forEach(el => {
+            if (el) el.textContent = ramUsed + 'MB / ' + ramTotal + 'MB';
+        });
+        
+        const ramProgress = document.querySelector('.ram-progress');
+        if (ramProgress) {
+            ramProgress.style.width = Math.min(ramPct, 100) + '%';
+        }
+        
+        // Safely update Disk
+        const diskData = stats.disk || {};
+        const diskPercent = diskData.use_percent || 'N/A';
+        
+        const diskElements = document.querySelectorAll('.vps-disk[data-id="' + vpsId + '"]');
+        diskElements.forEach(el => {
+            if (el) el.textContent = diskPercent;
+        });
+        
+        const diskProgress = document.querySelector('.disk-progress');
+        if (diskProgress && diskPercent !== 'N/A') {
+            try {
+                const diskPct = parseFloat(diskPercent.toString().replace('%', ''));
+                if (!isNaN(diskPct)) {
+                    diskProgress.style.width = Math.min(diskPct, 100) + '%';
+                }
+            } catch (e) {
+                console.warn('Error parsing disk percentage:', e);
+            }
+        }
+        
+        // Update live performance metrics if elements exist
+        const liveCpuValue = document.getElementById('liveCpuValue');
+        if (liveCpuValue) liveCpuValue.textContent = cpuValue.toFixed(1) + '%';
+        
+        const liveRamValue = document.getElementById('liveRamValue');
+        if (liveRamValue) liveRamValue.textContent = ramPct.toFixed(1) + '%';
+        
+        const liveDiskValue = document.getElementById('liveDiskValue');
+        if (liveDiskValue) liveDiskValue.textContent = diskPercent;
+        
+        // Update network stats if available
+        const networkData = stats.network || {};
+        const networkRx = document.getElementById('networkRx');
+        const networkTx = document.getElementById('networkTx');
+        if (networkRx) networkRx.textContent = networkData.rx || '0 B';
+        if (networkTx) networkTx.textContent = networkData.tx || '0 B';
+        
+        // Update processes
+        const processValue = document.getElementById('liveProcessValue');
+        if (processValue) processValue.textContent = stats.processes || 0;
+        
+        // Update load average
+        const loadAvg = stats.load_average || {};
+        const load1m = document.getElementById('load1m');
+        const load5m = document.getElementById('load5m');
+        if (load1m) load1m.textContent = (loadAvg['1min'] || 0).toFixed(2);
+        if (load5m) load5m.textContent = (loadAvg['5min'] || 0).toFixed(2);
+        
+    } catch (error) {
+        console.error('Error updating resource cards:', error);
+    }
+}
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.classList.remove('show');
+    }
+}
+
+// Escape key to close modals
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('.modal.show').forEach(modal => {
+            modal.classList.remove('show');
+        });
+    }
+});
+
+// Auto-update stats with improved error handling
+{% if stats.status == 'running' %}
+let statsUpdateInterval;
+let consecutiveErrors = 0;
+const maxConsecutiveErrors = 3;
+
+function updateStatsWithRetry() {
+    fetch(`/vps/${vpsId}/stats`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        // Reduced timeout to prevent hanging requests
+        signal: AbortSignal.timeout(10000) // 10 second timeout (reduced from 15s)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        consecutiveErrors = 0; // Reset error counter on success
+        
+        if (data.success && data.stats) {
+            // Update stats regardless of status to show current state
+            updateResourceCards(data.stats);
+            
+            // Update bandwidth usage if VPS is running (not cached status)
+            if (data.stats.status === 'running') {
+                updateBandwidthUsage();
+            }
+            
+            // If VPS is no longer running, reduce update frequency but don't stop completely
+            if (data.stats.status !== 'running') {
+                console.log('VPS is not running, reducing update frequency');
+                // Don't stop updates completely, just reduce frequency
+                if (statsUpdateInterval) {
+                    clearInterval(statsUpdateInterval);
+                    // Restart with longer interval for non-running VPS
+                    statsUpdateInterval = setInterval(updateStatsWithRetry, 30000); // 30s for stopped VPS
+                }
+            }
+        } else if (data.stats) {
+            // Even if not successful, update with available stats
+            updateResourceCards(data.stats);
+        }
+    })
+    .catch(error => {
+        consecutiveErrors++;
+        console.warn(`Stats update failed (${consecutiveErrors}/${maxConsecutiveErrors}):`, error.message);
+        
+        // Show different messages based on error type
+        if (error.name === 'TimeoutError' || error.message.includes('timeout')) {
+            console.warn('Connection timeout detected - Reducing update frequency');
+        }
+        
+        // If too many consecutive errors, increase interval instead of stopping
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+            console.warn('Multiple consecutive errors, reducing update frequency');
+            
+            if (statsUpdateInterval) {
+                clearInterval(statsUpdateInterval);
+                // Restart with much longer interval instead of stopping
+                statsUpdateInterval = setInterval(updateStatsWithRetry, 60000); // 60s for error recovery
+            }
+            
+            // Show user-friendly message
+            showToast('Connection issues detected - showing cached data', 'warning');
+        }
+    });
+}
+
+// Function to update bandwidth usage
+function updateBandwidthUsage() {
+    // Only update if VPS has bandwidth quota
+    const bandwidthQuota = {{ vps.get('bandwidth_quota_gb', 0) }};
+    if (bandwidthQuota <= 0) {
+        return;
+    }
+    
+    fetch(`/vps/${vpsId}/bandwidth-usage`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(8000) // 8 second timeout (reduced from 10s)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.usage) {
+            updateBandwidthDisplay(data.usage);
+        } else {
+            console.debug('Bandwidth usage update: no data or not successful');
+        }
+    })
+    .catch(error => {
+        console.warn('Bandwidth usage update failed:', error.message);
+        // Don't show error toast for bandwidth failures as they're less critical
+    });
+}
+
+// Function to update bandwidth display elements
+function updateBandwidthDisplay(usage) {
+    // Update bandwidth usage in header
+    const headerUsage = document.querySelector('.bandwidth-usage-header');
+    if (headerUsage) {
+        headerUsage.innerHTML = `<i class="fas fa-chart-line" style="color: var(--accent-warning);"></i> ${usage.total_gb.toFixed(2)} GB Used`;
+    }
+    
+    // Update bandwidth usage in stats card
+    const statsUsage = document.querySelector('.bandwidth-usage-stats');
+    if (statsUsage) {
+        statsUsage.textContent = `${usage.total_gb.toFixed(2)} GB used`;
+    }
+    
+    // Update bandwidth percentage
+    const percentageElement = document.querySelector('.bandwidth-percentage');
+    if (percentageElement) {
+        percentageElement.textContent = `${usage.percentage.toFixed(1)}%`;
+    }
+    
+    // Update progress bar
+    const progressBar = document.querySelector('.bandwidth-progress-bar');
+    if (progressBar) {
+        progressBar.style.width = `${Math.min(usage.percentage, 100)}%`;
+        
+        // Update progress bar color based on usage
+        progressBar.className = 'progress-bar bandwidth-progress-bar';
+        if (usage.percentage > 90) {
+            progressBar.classList.add('danger');
+        } else if (usage.percentage > 75) {
+            progressBar.classList.add('warning');
+        } else {
+            progressBar.classList.add('success');
+        }
+    }
+    
+    // Update quota exceeded warning
+    const quotaWarning = document.querySelector('.bandwidth-quota-warning');
+    if (quotaWarning) {
+        if (usage.quota_exceeded) {
+            quotaWarning.style.display = 'block';
+        } else {
+            quotaWarning.style.display = 'none';
+        }
+    }
+}
+
+function startStatsUpdates() {
+    if (statsUpdateInterval) {
+        clearInterval(statsUpdateInterval);
+    }
+    
+    // Initial update
+    updateStatsWithRetry();
+    
+    // Initial bandwidth usage update if VPS is running
+    if ('{{ stats.status }}' === 'running') {
+        updateBandwidthUsage();
+    }
+    
+    // Set up interval for regular updates - use adaptive intervals based on node type and VPS status
+    const isRemoteNode = {{ 'true' if node and not node.get('is_local', True) else 'false' }};
+    const vpsStatus = '{{ stats.status }}';
+    
+    let updateInterval;
+    if (vpsStatus === 'running') {
+        updateInterval = isRemoteNode ? 12000 : 8000; // 12s for remote, 8s for local (reduced from 15s/10s)
+    } else {
+        updateInterval = isRemoteNode ? 30000 : 20000; // Longer intervals for stopped VPS
+    }
+    
+    console.log(`Setting up stats updates every ${updateInterval/1000}s (${isRemoteNode ? 'remote' : 'local'} node, status: ${vpsStatus})`);
+    statsUpdateInterval = setInterval(updateStatsWithRetry, updateInterval);
+}
+
+function stopStatsUpdates() {
+    if (statsUpdateInterval) {
+        clearInterval(statsUpdateInterval);
+        statsUpdateInterval = null;
+    }
+}
+
+// Start auto-updates
+startStatsUpdates();
+
+// ===== LIVE STATS MANAGER INTEGRATION =====
+{% if socketio_available or live_stats_available %}
+// Subscribe to live stats for this VPS
+if (window.liveStatsManager) {
+    console.log('Subscribing to live stats for VPS {{ vps.id }}');
+    window.liveStatsManager.subscribeToVPSStats({{ vps.id }});
+    
+    // Show live indicator
+    const liveIndicator = document.querySelector('.vps-live-indicator');
+    if (liveIndicator) {
+        liveIndicator.style.display = 'inline-flex';
+    }
+    
+    // Listen for live stats updates
+    window.liveStatsManager.on('vps_stats_update', function(data) {
+        if (data.vps_id === {{ vps.id }}) {
+            console.log('Received live stats update for VPS {{ vps.id }}');
+            
+            // Update resource cards with live data
+            if (data.stats) {
+                updateResourceCards(data.stats);
+                
+                // Reset error counter since we got live data
+                consecutiveErrors = 0;
+                
+                // Update bandwidth if VPS is running
+                if (data.stats.status === 'running') {
+                    updateBandwidthUsage();
+                }
+                
+                // Update status indicator if status changed
+                const statusDot = document.querySelector('.status-dot');
+                const statusText = document.querySelector('.status-indicator span:last-child');
+                if (statusDot && statusText) {
+                    const s = (data.stats.status || '').toString().toLowerCase().replace(/_cached$/, '');
+                    let dotCls = 'stopped';
+                    let label = 'Unknown';
+                    if (s === 'running')      { dotCls = 'running';   label = 'Running'; }
+                    else if (s === 'stopped') { dotCls = 'stopped';   label = 'Stopped'; }
+                    else if (s === 'suspended'){dotCls = 'suspended'; label = 'Suspended'; }
+                    else if (s === 'missing') { dotCls = 'error';     label = 'Missing'; }
+                    else if (['error','timeout','connection_error','server_error','circuit_open'].includes(s)) {
+                        dotCls = 'error'; label = 'Connection Issue';
+                    }
+                    statusDot.className = 'status-dot ' + dotCls;
+                    statusText.textContent = label;
+                }
+            }
+        }
+    });
+    
+    // Listen for connection status changes
+    window.liveStatsManager.on('connection_status', function(status) {
+        const liveIndicator = document.querySelector('.vps-live-indicator');
+        if (liveIndicator) {
+            if (status.connected) {
+                liveIndicator.style.display = 'inline-flex';
+                liveIndicator.title = 'Live stats: ' + status.method;
+            } else {
+                liveIndicator.style.display = 'none';
+            }
+        }
+    });
+    
+    // Reduce polling interval since we have live updates
+    if (statsUpdateInterval) {
+        clearInterval(statsUpdateInterval);
+        // Use longer interval as backup to live updates
+        const isRemoteNode = {{ 'true' if node and not node.get('is_local', True) else 'false' }};
+        const backupInterval = isRemoteNode ? 30000 : 20000; // 30s/20s backup polling
+        console.log(`Live stats active - using ${backupInterval/1000}s backup polling`);
+        statsUpdateInterval = setInterval(updateStatsWithRetry, backupInterval);
+    }
+}
+{% endif %}
+{% endif %}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopAutoRefresh();
+    {% if stats.status == 'running' %}
+    stopStatsUpdates();
+    if (window.metricsInterval) {
+        clearInterval(window.metricsInterval);
+        window.metricsInterval = null;
+    }
+    {% endif %}
+    
+    // Unsubscribe from live stats
+    {% if socketio_available or live_stats_available %}
+    if (window.liveStatsManager) {
+        window.liveStatsManager.unsubscribeFromVPSStats({{ vps.id }});
+    }
+    {% endif %}
+});
+</script>
+
+</div><!-- End VPS Detail Container -->
+{% endblock %}

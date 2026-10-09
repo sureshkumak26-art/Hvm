@@ -1,0 +1,831 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ panel_name }} · Console · {{ vps.container_name }}{% endblock %}
+{% block header_title %}Console · {{ vps.container_name }}{% endblock %}
+
+{% block extra_css %}
+<!-- Xterm.js -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+<style>
+    /* ===== Page-scoped theme tokens ===== */
+    .vps-console-page {
+        --c-bg:        #0a0c10;
+        --c-bg-1:      #0c0e12;
+        --c-bg-2:      #111316;
+        --c-bg-3:      #161a20;
+        --c-border:    rgba(255, 255, 255, 0.08);
+        --c-border-2:  rgba(255, 255, 255, 0.14);
+        --c-cyan:      #4facfe;
+        --c-cyan-2:    #0dcaf0;
+        --c-green:     #34d399;
+        --c-red:       #ef4444;
+        --c-yellow:    #fbbf24;
+        --c-text:      #e6eef9;
+        --c-muted:     #9aa4b2;
+        --c-gradient:  linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+        color: var(--c-text);
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+        background:
+            radial-gradient(1200px 600px at 10% -10%, rgba(102, 126, 234, 0.08), transparent 60%),
+            radial-gradient(900px 500px at 110% 110%, rgba(118, 75, 162, 0.10), transparent 60%),
+            var(--c-bg);
+        border-radius: 14px;
+        border: 1px solid var(--c-border);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - var(--header-height) - 80px);
+        min-height: 480px;
+        position: relative;
+        box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Strip down panel chrome on this page so the terminal feels bigger
+       without losing the sidebar. */
+    body[data-console-page="vps-user"] .content { padding: 1rem; }
+    body[data-console-page="vps-user"] .footer  { display: none; }
+
+    /* ===== Top bar ===== */
+    .vps-console-page .console-topbar {
+        background: linear-gradient(180deg, rgba(17, 19, 22, 0.98), rgba(12, 14, 18, 0.98));
+        border-bottom: 1px solid var(--c-border);
+        padding: 0.7rem 1.1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+        backdrop-filter: blur(10px);
+        /* Keep the topbar above the SSH overlay so Exit / Reconnect /
+           Fullscreen are always reachable, even while the overlay is open. */
+        position: relative;
+        z-index: 60;
+    }
+    .vps-console-page .topbar-left {
+        display: flex; align-items: center; gap: 0.6rem;
+        flex-wrap: wrap; min-width: 0;
+    }
+    .vps-console-page .vps-badge {
+        background: linear-gradient(135deg, rgba(13, 202, 240, 0.16), rgba(79, 172, 254, 0.16));
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        border: 1px solid rgba(13, 202, 240, 0.3);
+        font-weight: 600;
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        color: var(--c-text);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .vps-console-page .vps-badge i { color: var(--c-cyan-2); }
+    .vps-console-page .vps-badge .badge {
+        background: rgba(0, 0, 0, 0.35);
+        padding: 0.15rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+    }
+    .vps-console-page .conn-status {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        background: rgba(17, 19, 22, 0.85);
+        padding: 0.35rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid var(--c-border);
+        font-size: 0.8rem;
+        color: var(--c-text);
+    }
+    .vps-console-page .status-led {
+        width: 9px; height: 9px; border-radius: 50%;
+        background: #6c757d; transition: all 0.3s ease;
+    }
+    .vps-console-page .status-led.connected {
+        background: var(--c-green);
+        box-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+        animation: vc-pulse 2s ease-in-out infinite;
+    }
+    .vps-console-page .status-led.disconnected { background: var(--c-red); }
+    .vps-console-page .status-led.connecting {
+        background: var(--c-yellow);
+        animation: vc-blink 1s ease-in-out infinite;
+    }
+    @keyframes vc-pulse {
+        0%,100% { transform: scale(1);    opacity: 1; }
+        50%     { transform: scale(1.2);  opacity: 0.8; }
+    }
+    @keyframes vc-blink {
+        0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+
+    .vps-console-page .control-buttons {
+        display: flex; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap;
+    }
+    .vps-console-page .control-buttons .btn {
+        background: rgba(17, 19, 22, 0.8);
+        border: 1px solid var(--c-border);
+        color: var(--c-text);
+        border-radius: 10px;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.18s ease;
+        font-family: inherit;
+    }
+    .vps-console-page .control-buttons .btn:hover {
+        background: rgba(102, 126, 234, 0.18);
+        border-color: rgba(102, 126, 234, 0.5);
+        transform: translateY(-1px);
+    }
+    .vps-console-page .control-buttons .btn:active { transform: translateY(0); }
+    .vps-console-page .control-buttons .btn-exit {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(220, 38, 38, 0.22));
+        border-color: rgba(239, 68, 68, 0.45);
+    }
+    .vps-console-page .control-buttons .btn-exit:hover {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(220, 38, 38, 0.32));
+        border-color: rgba(239, 68, 68, 0.65);
+    }
+
+    /* ===== Terminal ===== */
+    .vps-console-page #terminal-container {
+        flex: 1;
+        background: var(--c-bg-1);
+        padding: 10px;
+        overflow: hidden;
+        position: relative;
+        min-height: 0;
+    }
+    .vps-console-page .xterm {
+        height: 100%;
+        padding: 8px;
+        border-radius: 10px;
+        background: rgba(12, 14, 18, 0.85);
+        border: 1px solid var(--c-border);
+    }
+    .vps-console-page .xterm-viewport {
+        overflow-y: auto !important;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(102, 126, 234, 0.35) transparent;
+    }
+    .vps-console-page .xterm-viewport::-webkit-scrollbar { width: 8px; }
+    .vps-console-page .xterm-viewport::-webkit-scrollbar-thumb {
+        background: rgba(102, 126, 234, 0.4); border-radius: 4px;
+    }
+
+    /* ===== Footer hint strip ===== */
+    .vps-console-page .console-footer {
+        background: linear-gradient(180deg, rgba(12, 14, 18, 0.92), rgba(17, 19, 22, 0.95));
+        border-top: 1px solid var(--c-border);
+        padding: 0.45rem 1.1rem;
+        font-size: 0.74rem;
+        color: var(--c-muted);
+        display: flex;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+        flex-shrink: 0;
+    }
+    .vps-console-page .footer-hint {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .vps-console-page .footer-hint i { color: var(--c-cyan-2); opacity: 0.8; }
+
+    /* ===== SSH login overlay ===== */
+    .vps-console-page .ssh-login-overlay {
+        position: absolute; inset: 0;
+        background: rgba(8, 10, 14, 0.78);
+        backdrop-filter: blur(8px);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 50;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+    .vps-console-page .ssh-login-overlay.d-none { display: none !important; }
+
+    .vps-console-page .ssh-login-card {
+        background: linear-gradient(160deg, rgba(20, 22, 27, 0.96), rgba(13, 15, 20, 0.96));
+        border-radius: 16px;
+        width: 380px;
+        max-width: 100%;
+        max-height: calc(100% - 1rem);
+        overflow-y: auto;
+        padding: 1.1rem 1.2rem 1.2rem;
+        border: 1px solid var(--c-border-2);
+        box-shadow:
+            0 30px 60px -20px rgba(0, 0, 0, 0.55),
+            0 0 0 1px rgba(102, 126, 234, 0.06),
+            0 0 40px rgba(102, 126, 234, 0.08);
+        animation: vc-slide-up 0.35s ease-out;
+        position: relative;
+    }
+    @keyframes vc-slide-up {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .vps-console-page .ssh-login-card h3 {
+        font-weight: 700; margin: 0 0 0.85rem;
+        color: #fff; font-size: 1rem;
+        display: flex; align-items: center; gap: 0.5rem;
+        padding-right: 2rem; /* room for the close button */
+    }
+    .vps-console-page .ssh-login-card h3 i { color: var(--c-cyan-2); font-size: 0.95rem; }
+
+    /* Close (×) button — top-right of the card */
+    .vps-console-page .overlay-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid var(--c-border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--c-text);
+        font-size: 0.85rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.18s ease;
+    }
+    .vps-console-page .overlay-close:hover {
+        background: rgba(239, 68, 68, 0.18);
+        border-color: rgba(239, 68, 68, 0.45);
+        color: #fff;
+    }
+
+    /* Secondary "back to VPS" link under the connect button */
+    .vps-console-page .btn-secondary-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        width: 100%;
+        margin-top: 0.45rem;
+        padding: 0.45rem;
+        background: transparent;
+        border: 1px solid var(--c-border-2);
+        color: var(--c-muted);
+        border-radius: 9px;
+        font-size: 0.78rem;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        font-family: inherit;
+    }
+    .vps-console-page .btn-secondary-link:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--c-text);
+        border-color: var(--c-border-2);
+    }
+
+    /* Custom inputs (no Bootstrap) */
+    .vps-console-page .field { margin-bottom: 0.6rem; }
+    .vps-console-page .field-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.6rem;
+    }
+    .vps-console-page .field-row .field {
+        flex: 1; margin-bottom: 0; min-width: 0;
+    }
+    .vps-console-page .field-label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: var(--c-text);
+        margin-bottom: 0.25rem;
+        letter-spacing: 0.02em;
+    }
+    .vps-console-page .field-group {
+        display: flex;
+        align-items: stretch;
+        background: rgba(8, 10, 14, 0.75);
+        border: 1px solid var(--c-border-2);
+        border-radius: 9px;
+        overflow: hidden;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .vps-console-page .field-group:focus-within {
+        border-color: rgba(79, 172, 254, 0.65);
+        box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15);
+    }
+    .vps-console-page .field-icon {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 34px;
+        background: rgba(255, 255, 255, 0.03);
+        border-right: 1px solid var(--c-border);
+        color: var(--c-cyan-2);
+        font-size: 0.82rem;
+        flex-shrink: 0;
+    }
+    .vps-console-page .field-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        padding: 0.5rem 0.6rem;
+        color: var(--c-text);
+        font-size: 0.86rem;
+        font-family: inherit;
+        outline: none;
+        min-width: 0;
+        width: 100%;
+    }
+    .vps-console-page .field-input::placeholder { color: rgba(154, 164, 178, 0.55); }
+    .vps-console-page .field-input:-webkit-autofill,
+    .vps-console-page .field-input:-webkit-autofill:hover,
+    .vps-console-page .field-input:-webkit-autofill:focus {
+        -webkit-text-fill-color: var(--c-text) !important;
+        -webkit-box-shadow: 0 0 0 1000px rgba(8, 10, 14, 0.75) inset !important;
+        transition: background-color 99999s ease-in-out 0s;
+        caret-color: var(--c-text);
+    }
+    .vps-console-page input[type="number"] { -moz-appearance: textfield; }
+    .vps-console-page input[type="number"]::-webkit-outer-spin-button,
+    .vps-console-page input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none; margin: 0;
+    }
+
+    .vps-console-page .btn-connect {
+        background: var(--c-gradient);
+        border: none;
+        width: 100%;
+        padding: 0.6rem;
+        font-weight: 700;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        color: white;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 0.45rem;
+        font-family: inherit;
+        margin-top: 0.4rem;
+    }
+    .vps-console-page .btn-connect:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 30px -10px rgba(102, 126, 234, 0.55);
+    }
+    .vps-console-page .btn-connect:active { transform: translateY(0); }
+
+    .vps-console-page .small-note {
+        font-size: 0.7rem;
+        color: var(--c-muted);
+        margin-top: 0.7rem;
+        text-align: center;
+        padding: 0.45rem 0.55rem;
+        background: rgba(102, 126, 234, 0.06);
+        border-radius: 8px;
+        border: 1px solid rgba(102, 126, 234, 0.12);
+        line-height: 1.35;
+    }
+    .vps-console-page .small-note i { color: var(--c-cyan-2); margin-right: 0.3rem; }
+    .vps-console-page .d-none { display: none !important; }
+
+    /* ===== Mobile polish ===== */
+    @media (max-width: 768px) {
+        .vps-console-page {
+            height: calc(100vh - var(--header-height) - 28px);
+            min-height: 0;
+            border-radius: 12px;
+        }
+        body[data-console-page="vps-user"] .content { padding: 0.6rem; }
+        .vps-console-page .console-topbar { padding: 0.5rem 0.6rem; gap: 0.5rem; }
+        .vps-console-page .topbar-left { gap: 0.4rem; }
+        .vps-console-page .vps-badge {
+            font-size: 0.78rem; padding: 0.3rem 0.65rem;
+        }
+        .vps-console-page .vps-badge .badge { font-size: 0.62rem; padding: 0.1rem 0.45rem; }
+        .vps-console-page .conn-status {
+            font-size: 0.72rem; padding: 0.28rem 0.65rem;
+        }
+        .vps-console-page .control-buttons { gap: 0.3rem; }
+        .vps-console-page .control-buttons .btn {
+            padding: 0.4rem 0.55rem;
+            font-size: 0.72rem;
+        }
+        /* Collapse button labels to just icons on tight screens. */
+        .vps-console-page .control-buttons .btn .label { display: none; }
+        .vps-console-page .control-buttons .btn-exit .label { display: inline; }
+        .vps-console-page #terminal-container { padding: 6px; }
+        .vps-console-page .xterm { padding: 6px; border-radius: 8px; }
+        .vps-console-page .console-footer {
+            font-size: 0.68rem; gap: 0.7rem; padding: 0.35rem 0.6rem;
+        }
+        .vps-console-page .console-footer .footer-hint:nth-child(n+3) { display: none; }
+        .vps-console-page .ssh-login-card { padding: 1.25rem; border-radius: 14px; }
+        .vps-console-page .ssh-login-card h3 { font-size: 1.05rem; }
+        .vps-console-page .field-input { font-size: 16px; /* prevent iOS zoom */ }
+    }
+
+    @media (max-width: 380px) {
+        .vps-console-page .conn-status .status-text { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vps-console-page" id="vpsConsolePage">
+
+    <!-- Top bar -->
+    <div class="console-topbar">
+        <div class="topbar-left">
+            <div class="vps-badge" title="{{ vps.container_name }}">
+                <i class="fa-solid fa-cube"></i>
+                <span>{{ vps.container_name }}</span>
+                <span class="badge">{{ vps.os_version }}</span>
+            </div>
+            <div class="conn-status" id="connStatus">
+                <span class="status-led" id="statusLed"></span>
+                <span id="statusText" class="status-text">Disconnected</span>
+            </div>
+        </div>
+        <div class="control-buttons">
+            <button class="btn" id="fullscreenBtn" title="Toggle fullscreen (F11)">
+                <i class="fa-regular fa-window-maximize"></i><span class="label">Fullscreen</span>
+            </button>
+            <button class="btn" id="reconnectBtn" title="Reconnect">
+                <i class="fa-solid fa-rotate-right"></i><span class="label">Reconnect</span>
+            </button>
+            <button class="btn btn-exit" id="exitBtn" title="Exit console">
+                <i class="fa-regular fa-circle-xmark"></i><span class="label">Exit</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="terminal-container"></div>
+
+    <!-- Footer hints -->
+    <div class="console-footer">
+        <span class="footer-hint"><i class="fa-regular fa-keyboard"></i> Ctrl+C / Ctrl+Z work natively</span>
+        <span class="footer-hint"><i class="fa-regular fa-clipboard"></i> Paste: Ctrl+Shift+V / right-click</span>
+        <span class="footer-hint"><i class="fa-regular fa-arrow-left"></i> Disconnect does NOT stop your VPS</span>
+    </div>
+
+    <!-- SSH connection overlay (visible until connected) -->
+    <div id="sshOverlay" class="ssh-login-overlay">
+        <div class="ssh-login-card">
+            <button type="button" class="overlay-close" id="overlayCloseBtn"
+                    title="Cancel and go back to VPS">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <h3>
+                <i class="fa-solid fa-terminal"></i>
+                <span>Connect to VPS</span>
+            </h3>
+
+            <div class="field">
+                <label class="field-label" for="sshHost">Host / IP</label>
+                <div class="field-group">
+                    <span class="field-icon"><i class="fa-solid fa-network-wired"></i></span>
+                    <input type="text" class="field-input" id="sshHost"
+                           placeholder="e.g. 192.168.1.100 or your.vps.com"
+                           value="{{ vps_ip or '' }}" autocomplete="off">
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label class="field-label" for="sshPort">Port</label>
+                    <div class="field-group">
+                        <span class="field-icon"><i class="fa-regular fa-plug"></i></span>
+                        <input type="number" class="field-input" id="sshPort"
+                               value="22" min="1" max="65535" inputmode="numeric">
+                    </div>
+                </div>
+                <div class="field" style="flex: 1.6;">
+                    <label class="field-label" for="sshUser">Username</label>
+                    <div class="field-group">
+                        <span class="field-icon"><i class="fa-regular fa-user"></i></span>
+                        <input type="text" class="field-input" id="sshUser" value="root" autocomplete="username">
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="field-label" for="sshPass">Password</label>
+                <div class="field-group">
+                    <span class="field-icon"><i class="fa-solid fa-lock"></i></span>
+                    <input type="password" class="field-input" id="sshPass"
+                           placeholder="••••••••" autocomplete="current-password">
+                </div>
+            </div>
+
+            <button class="btn-connect" id="connectBtn" type="button">
+                <i class="fa-regular fa-paper-plane"></i>
+                <span>Establish SSH session</span>
+            </button>
+
+            <a class="btn-secondary-link" href="{{ url_for('vps_detail', vps_id=vps.id) }}">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Back to VPS</span>
+            </a>
+
+            <div class="small-note">
+                <i class="fa-regular fa-circle-info"></i>
+                Your credentials are sent only to your VPS — we never store them.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    document.body.setAttribute('data-console-page', 'vps-user');
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<!-- Xterm.js -->
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+
+<script>
+    (function() {
+        const vpsId = {{ vps.id }};
+        const socket = io(window.location.origin, {
+            transports: ['websocket', 'polling'],
+            path: '/socket.io'
+        });
+
+        const term = new Terminal({
+            cursorBlink: true,
+            cursorStyle: 'block',
+            fontSize: 14,
+            fontFamily: 'JetBrains Mono, Fira Code, monospace',
+            theme: {
+                background: '#0c0e12',
+                foreground: '#e6eef9',
+                cursor: '#0dcaf0',
+                selectionBackground: '#2d4c7c',
+                black: '#2e343a', red: '#f07178', green: '#a3d6a3',
+                yellow: '#ffcb6b', blue: '#5fa3e0', magenta: '#d39ad4',
+                cyan: '#7fdbdb', white: '#eef4f9'
+            },
+            scrollback: 5000,
+            tabStopWidth: 4
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        const overlay = document.getElementById('sshOverlay');
+        const statusLed = document.getElementById('statusLed');
+        const statusText = document.getElementById('statusText');
+        const connectBtn = document.getElementById('connectBtn');
+        const sshHost = document.getElementById('sshHost');
+        const sshPort = document.getElementById('sshPort');
+        const sshUser = document.getElementById('sshUser');
+        const sshPass = document.getElementById('sshPass');
+        const reconnectBtn = document.getElementById('reconnectBtn');
+        const exitBtn = document.getElementById('exitBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const terminalContainer = document.getElementById('terminal-container');
+        const consolePage = document.getElementById('vpsConsolePage');
+        const overlayCloseBtn = document.getElementById('overlayCloseBtn');
+
+        let connected = false;
+        let connecting = false;
+        let connectionInfo = null;
+
+        function setStatus(state, msg) {
+            statusLed.className = 'status-led';
+            if (state === 'connected') {
+                statusLed.classList.add('connected');
+                statusText.innerText = msg || 'Connected';
+            } else if (state === 'connecting') {
+                statusLed.classList.add('connecting');
+                statusText.innerText = msg || 'Connecting...';
+            } else if (state === 'disconnected') {
+                statusLed.classList.add('disconnected');
+                statusText.innerText = msg || 'Disconnected';
+            }
+        }
+
+        function openTerminal() {
+            term.open(terminalContainer);
+            try { fitAddon.fit(); } catch(e) {}
+            term.focus();
+        }
+        openTerminal();
+
+        async function fetchConnectionDetails() {
+            try {
+                setStatus('connecting', 'Preparing...');
+                term.writeln('\x1b[36m[ Fetching SSH connection details... ]\x1b[0m\r\n');
+                const response = await fetch(`/vps/${vpsId}/console/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    connectionInfo = data.connection;
+                    sshHost.value = connectionInfo.host;
+                    sshPort.value = connectionInfo.port;
+                    sshUser.value = connectionInfo.username;
+                    sshPass.value = connectionInfo.password;
+                    term.writeln('\x1b[32m✓ Connection details retrieved\x1b[0m');
+                    if (data.port_created) {
+                        term.writeln('\x1b[33m✓ SSH port forward created automatically\x1b[0m');
+                    }
+                    term.writeln('\x1b[36m✓ Password retrieved from VPS\x1b[0m');
+                    term.writeln('\r\n\x1b[1mReady to connect!\x1b[0m\r\n');
+                    setStatus('disconnected', 'Ready');
+
+                    setTimeout(() => {
+                        if (!connected && !connecting) {
+                            term.writeln('\x1b[36m[ Auto-connecting in 3 seconds... Press any key to cancel ]\x1b[0m\r\n');
+                            const autoConnectTimer = setTimeout(initiateConnection, 3000);
+                            const cancelAutoConnect = () => {
+                                clearTimeout(autoConnectTimer);
+                                term.writeln('\x1b[33m[ Auto-connect cancelled ]\x1b[0m\r\n');
+                                try { term.off('key', cancelAutoConnect); } catch(e) {}
+                            };
+                            term.on('key', cancelAutoConnect);
+                        }
+                    }, 1000);
+                } else {
+                    term.writeln('\x1b[31m✗ Failed to get connection details: ' + data.error + '\x1b[0m\r\n');
+                    term.writeln('\x1b[33mPlease enter connection details manually.\x1b[0m\r\n');
+                    setStatus('disconnected', 'Manual setup required');
+                }
+            } catch (error) {
+                console.error('Failed to fetch connection details:', error);
+                term.writeln('\x1b[31m✗ Error: ' + error.message + '\x1b[0m\r\n');
+                term.writeln('\x1b[33mPlease enter connection details manually.\x1b[0m\r\n');
+                setStatus('disconnected', 'Manual setup required');
+            }
+        }
+        fetchConnectionDetails();
+
+        socket.on('connect', () => {});
+
+        socket.on('ssh_connected', (data) => {
+            connecting = false;
+            connected = true;
+            overlay.classList.add('d-none');
+            try { fitAddon.fit(); } catch(e) {}
+            setStatus('connected', `${data.username}@${data.host}:${data.port}`);
+            term.clear();
+            term.writeln('\x1b[1;32m╔═══════════════════════════════════════════════════════════╗\x1b[0m');
+            term.writeln('\x1b[1;32m║           Connected to ' + '{{ vps.container_name }}'.padEnd(32) + '║\x1b[0m');
+            term.writeln('\x1b[1;32m╚═══════════════════════════════════════════════════════════╝\x1b[0m\r\n');
+            term.focus();
+        });
+
+        socket.on('ssh_output', (data) => { term.write(data); });
+
+        socket.on('ssh_error', (err) => {
+            connecting = false;
+            connected = false;
+            setStatus('disconnected', 'Error');
+            overlay.classList.remove('d-none');
+            term.writeln('\r\n\x1b[1;31m✘ ' + (err.error || 'Connection failed') + '\x1b[0m\r\n');
+        });
+
+        socket.on('ssh_disconnected', () => {
+            connected = false;
+            connecting = false;
+            setStatus('disconnected', 'Disconnected');
+            overlay.classList.remove('d-none');
+            term.writeln('\r\n\x1b[33m── Session terminated ──\x1b[0m\r\n');
+        });
+
+        socket.on('disconnect', () => {
+            if (connected) {
+                connected = false;
+                connecting = false;
+                setStatus('disconnected', 'Socket lost');
+                term.writeln('\x1b[1;31m\r\n[!] Connection to panel lost. Reconnecting...\x1b[0m');
+            }
+        });
+
+        term.onData(data => {
+            if (!connected) return;
+            socket.emit('ssh_input', { vps_id: vpsId, input: data });
+        });
+
+        function initiateConnection() {
+            if (connecting) return;
+            const host = sshHost.value.trim();
+            const port = parseInt(sshPort.value, 10) || 22;
+            const user = sshUser.value.trim() || 'root';
+            const pass = sshPass.value.trim();
+            if (!host) { alert('Please enter VPS IP or hostname'); return; }
+            if (!pass) { alert('Password is required'); return; }
+
+            connecting = true;
+            connected = false;
+            setStatus('connecting', 'SSH handshake');
+            overlay.classList.add('d-none');
+
+            term.clear();
+            term.writeln('\x1b[36m[ Establishing SSH Connection... ]\x1b[0m');
+            term.writeln('\x1b[36mConnecting to ' + user + '@' + host + ':' + port + ' ...\x1b[0m\r\n');
+
+            socket.emit('ssh_connect', {
+                vps_id: vpsId, host: host, port: port,
+                username: user, password: pass
+            });
+        }
+
+        connectBtn.addEventListener('click', initiateConnection);
+
+        reconnectBtn.addEventListener('click', () => {
+            if (connected) socket.emit('ssh_disconnect', { vps_id: vpsId });
+            connected = false;
+            connecting = false;
+            overlay.classList.remove('d-none');
+            setStatus('disconnected', 'Ready');
+            term.clear();
+            fetchConnectionDetails();
+        });
+
+        exitBtn.addEventListener('click', () => {
+            if (connected) socket.emit('ssh_disconnect', { vps_id: vpsId });
+            window.location.href = `/vps/${vpsId}`;
+        });
+
+        // The (×) on the overlay does the same thing as Exit — leaves the
+        // console and returns to the VPS detail page.
+        if (overlayCloseBtn) {
+            overlayCloseBtn.addEventListener('click', () => {
+                if (connected) socket.emit('ssh_disconnect', { vps_id: vpsId });
+                window.location.href = `/vps/${vpsId}`;
+            });
+        }
+
+        // Pressing Escape while the overlay is open also exits.
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !overlay.classList.contains('d-none')) {
+                if (connected) socket.emit('ssh_disconnect', { vps_id: vpsId });
+                window.location.href = `/vps/${vpsId}`;
+            }
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                if (consolePage.requestFullscreen) consolePage.requestFullscreen();
+                else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        function refit() {
+            if (term && fitAddon) {
+                try { fitAddon.fit(); } catch(e) {}
+                if (connected) {
+                    const dims = fitAddon.proposeDimensions();
+                    if (dims) {
+                        socket.emit('ssh_resize', {
+                            vps_id: vpsId, cols: dims.cols, rows: dims.rows
+                        });
+                    }
+                }
+            }
+        }
+        window.addEventListener('resize', refit);
+        // Re-fit after the sidebar toggle animation.
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#menuToggle')) setTimeout(refit, 350);
+        });
+        // Re-fit after the on-screen keyboard hides on mobile.
+        window.addEventListener('orientationchange', () => setTimeout(refit, 400));
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F11') { e.preventDefault(); fullscreenBtn.click(); }
+            if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+                e.preventDefault();
+                navigator.clipboard.readText().then(text => {
+                    if (connected && text) {
+                        socket.emit('ssh_input', { vps_id: vpsId, input: text });
+                    }
+                }).catch(() => {});
+            }
+        });
+
+        sshPass.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); connectBtn.click(); }
+        });
+
+        setStatus('disconnected', 'Initializing...');
+
+        window.addEventListener('beforeunload', () => {
+            if (connected) socket.emit('ssh_disconnect', { vps_id: vpsId });
+        });
+    })();
+</script>
+{% endblock %}

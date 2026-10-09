@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Manage IP: {{ vps.hostname or vps.container_name }} - {{ panel_name }}{% endblock %}
+
+{% block header_title %}Manage Public IP{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="breadcrumb-item">{{ vps.hostname or vps.container_name }}</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">Manage IP</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+.ipc-grid { display: grid; grid-template-columns: 1fr 380px; gap: 1.25rem; }
+@media (max-width: 1100px) { .ipc-grid { grid-template-columns: 1fr; } }
+.ipc-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1rem; }
+.ipc-card h3 { margin: 0 0 1rem 0; font-size: 1.05rem; display: flex; align-items: center; gap: .5rem; }
+.ipc-card h3 i { color: #8b5cf6; }
+.mono { font-family: 'Courier New', Consolas, monospace; word-break: break-all; }
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: .35rem .9rem; font-size: .92rem; }
+.kv .k { color: var(--text-muted); }
+.kv .v { color: var(--text-primary); }
+.pill { display: inline-block; padding: .2rem .55rem; border-radius: 6px; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.pill.ok { background: rgba(16,185,129,.15); color: #10b981; }
+.pill.warn { background: rgba(245,158,11,.15); color: #f59e0b; }
+.pill.err { background: rgba(239,68,68,.15); color: #ef4444; }
+.pill.muted { background: var(--bg-tertiary); color: var(--text-muted); }
+.cmd { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; padding: .75rem .85rem; font-family: 'Courier New', Consolas, monospace; font-size: .8rem; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+.cmd .h { color: #8b5cf6; }
+.cmd .lxc { color: #3b82f6; }
+.cmd .ip { color: #10b981; }
+.action-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+.note { padding: .85rem 1rem; border-radius: 8px; font-size: .85rem; line-height: 1.55; }
+.note.info { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.25); color: var(--text-secondary); }
+.note.warn { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.25); color: var(--text-secondary); }
+.note.danger { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: var(--text-secondary); }
+.note strong { color: var(--text-primary); }
+.input-row { display: grid; grid-template-columns: 1fr 110px; gap: .5rem; }
+@media (max-width: 520px) { .input-row { grid-template-columns: 1fr; } }
+</style>
+
+<!-- VPS Header -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div class="user-avatar" style="width: 48px; height: 48px; background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
+            <i class="fas fa-network-wired" style="font-size: 1.25rem;"></i>
+        </div>
+        <div>
+            <h2 style="font-size: 1.25rem;">{{ vps.hostname or vps.container_name }}</h2>
+            <div style="color: var(--text-muted); font-size: 0.875rem;">Container: <span class="mono">{{ vps.container_name }}</span></div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: .5rem; align-items: center;">
+            <span class="pill {% if vps.status == 'running' %}ok{% else %}muted{% endif %}">{{ vps.status }}</span>
+            <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="btn btn-outline btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to VPS
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="ipc-grid">
+    <!-- LEFT: management form -->
+    <div>
+        <div class="ipc-card">
+            <h3><i class="fas fa-globe"></i> Routed Public IP</h3>
+
+            <div class="kv" style="margin-bottom: 1rem;">
+                <div class="k">Current IP</div>
+                <div class="v">
+                    {% if vps.ip_address %}
+                        <span class="mono">{{ vps.ip_address }}</span>
+                        <span class="pill ok" style="margin-left:.5rem">configured</span>
+                    {% else %}
+                        <span class="pill muted">none</span>
+                    {% endif %}
+                </div>
+                <div class="k">Container</div>
+                <div class="v mono">{{ vps.container_name }}</div>
+                <div class="k">Owner</div>
+                <div class="v">{{ owner or '—' }}</div>
+                <div class="k">Status</div>
+                <div class="v">
+                    <span class="pill {% if vps.status == 'running' %}ok{% else %}err{% endif %}">{{ vps.status }}</span>
+                    {% if vps.status != 'running' %}
+                        <span style="color: var(--text-muted); margin-left:.5rem; font-size:.85rem">VPS must be running to change IP.</span>
+                    {% endif %}
+                </div>
+                {% if node %}
+                <div class="k">Node</div>
+                <div class="v">{{ node.name }} <span class="mono" style="color:var(--text-muted)">({{ node.url }})</span></div>
+                {% endif %}
+            </div>
+
+            <form id="ipForm" onsubmit="return false;">
+                <div class="form-group">
+                    <label class="form-label">New IP Address</label>
+                    <div class="input-row">
+                        <input type="text" id="newIp" class="form-control mono"
+                               placeholder="e.g. 162.141.0.29"
+                               value="{{ vps.ip_address or '' }}"
+                               autocomplete="off" spellcheck="false">
+                        <input type="number" id="subnet" class="form-control mono"
+                               value="32" min="0" max="32" title="Subnet (0-32)">
+                    </div>
+                    <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                        Enter an IPv4 address and the subnet (default <code>/32</code> for routed NICs). Leave the IP blank and click <strong>Remove</strong> to delete the current IP.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Host Parent Interface</label>
+                    <input type="text" id="parentIface" class="form-control mono"
+                           value="{{ default_parent_iface or 'eth0' }}"
+                           placeholder="eth0" autocomplete="off">
+                    <small style="color: var(--text-muted); display: block; margin-top: .35rem;">
+                        The host NIC the routed IP will be parented on (matches the second argument of <code>parent=</code>).
+                    </small>
+                </div>
+
+                <div class="action-row">
+                    <button type="button" class="btn btn-primary" id="btnSave" onclick="saveIp()">
+                        <i class="fas fa-save"></i> Apply IP
+                    </button>
+                    {% if vps.ip_address %}
+                    <button type="button" class="btn btn-danger" id="btnRemove" onclick="removeIp()">
+                        <i class="fas fa-trash"></i> Remove IP
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn btn-outline" onclick="updatePreview()">
+                        <i class="fas fa-terminal"></i> Preview Commands
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="ipc-card">
+            <h3><i class="fas fa-terminal"></i> Commands that will run</h3>
+            <p style="color: var(--text-muted); font-size: .85rem; margin-bottom: .75rem;">
+                The exact host-side commands that will execute on the node. Update the form fields above to refresh.
+            </p>
+            <div class="cmd" id="cmdPreview">
+                <span style="color: var(--text-muted);"># Fill in the form above and click "Preview Commands"</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: help -->
+    <div>
+        <div class="ipc-card">
+            <h3><i class="fas fa-shield-halved"></i> Admin Only</h3>
+            <div class="note warn">
+                This page is restricted to administrators. The VPS owner cannot change their own public IP.
+            </div>
+        </div>
+
+        <div class="ipc-card">
+            <h3><i class="fas fa-circle-info"></i> How Routed IPs Work</h3>
+            <p style="color: var(--text-secondary); font-size: .88rem; line-height: 1.6;">
+                The panel uses LXC's <strong>routed</strong> NIC type. A device named <span class="mono">pubip</span> is attached to the container with the public IP, which appears inside the guest as <span class="mono">eth1</span>. Outbound traffic uses the host's parent interface; inbound traffic is routed by the upstream gateway to this host.
+            </p>
+            <ul style="margin: .75rem 0 0 1.25rem; color: var(--text-secondary); font-size: .85rem; line-height: 1.7;">
+                <li>The container must be running.</li>
+                <li>It will be restarted automatically after the device change.</li>
+                <li>The IP must already be routed (or assignable) to this host.</li>
+                <li>Default mask is <span class="mono">/32</span> — that's standard for routed NICs.</li>
+            </ul>
+        </div>
+
+        <div class="ipc-card">
+            <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+            <div style="display: flex; flex-direction: column; gap: .5rem;">
+                <a href="{{ url_for('vps_detail', vps_id=vps.id) }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-server"></i> View VPS
+                </a>
+                {% if vps.user_id %}
+                <a href="{{ url_for('admin_user_detail', user_id=vps.user_id) }}" class="btn btn-outline btn-sm">
+                    <i class="fas fa-user"></i> View Owner
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const VPS_ID         = {{ vps.id }};
+const CURRENT_IP     = {{ (vps.ip_address or '') | tojson }};
+const CONTAINER_NAME = {{ vps.container_name | tojson }};
+
+function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[m]));
+}
+
+function readForm() {
+    const ip      = (document.getElementById('newIp').value || '').trim();
+    const subnet  = (document.getElementById('subnet').value || '32').trim().replace(/^\//, '');
+    const parent  = (document.getElementById('parentIface').value || 'eth0').trim();
+    return { ip, subnet, parent };
+}
+
+function validate(form, requireIp) {
+    if (requireIp && !form.ip) {
+        showToast('Please enter an IP address.', 'error');
+        return false;
+    }
+    if (form.ip && !/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(form.ip)) {
+        showToast('Please enter a valid IPv4 address.', 'error');
+        return false;
+    }
+    const sn = parseInt(form.subnet, 10);
+    if (isNaN(sn) || sn < 0 || sn > 32) {
+        showToast('Subnet must be between 0 and 32.', 'error');
+        return false;
+    }
+    if (!/^[A-Za-z0-9._:-]{1,32}$/.test(form.parent)) {
+        showToast('Invalid parent interface name.', 'error');
+        return false;
+    }
+    return true;
+}
+
+function updatePreview() {
+    const f = readForm();
+    const ip = f.ip || '<NEW_IP>';
+    const action = f.ip
+        ? (CURRENT_IP ? (CURRENT_IP === f.ip ? 'noop' : 'change') : 'add')
+        : 'remove';
+
+    let html = '';
+    if (action === 'add') {
+        html =
+            '<span class="h"># 1) Add IP/subnet to host parent interface</span>\n' +
+            'ip addr add <span class="ip">' + escapeHtml(ip) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent) + '\n\n' +
+            '<span class="h"># 2) Attach routed NIC to container (creates eth1 inside)</span>\n' +
+            '<span class="lxc">lxc</span> config device add ' + escapeHtml(CONTAINER_NAME) + ' pubip nic nictype=routed parent=' + escapeHtml(f.parent) + ' ipv4.address=<span class="ip">' + escapeHtml(ip) + '</span> name=eth1\n\n' +
+            '<span class="h"># 3) Restart container</span>\n' +
+            '<span class="lxc">lxc</span> restart ' + escapeHtml(CONTAINER_NAME) + '\n\n' +
+            '<span class="h"># 4) Remove IP from host parent interface (now routed to container)</span>\n' +
+            'ip addr del <span class="ip">' + escapeHtml(ip) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent);
+    } else if (action === 'change') {
+        html =
+            '<span class="h"># 1) Remove the old routed device</span>\n' +
+            '<span class="lxc">lxc</span> config device remove ' + escapeHtml(CONTAINER_NAME) + ' pubip\n' +
+            'ip addr del <span class="ip">' + escapeHtml(CURRENT_IP) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent) + '\n\n' +
+            '<span class="h"># 2) Add the new host IP and attach routed device</span>\n' +
+            'ip addr add <span class="ip">' + escapeHtml(ip) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent) + '\n' +
+            '<span class="lxc">lxc</span> config device add ' + escapeHtml(CONTAINER_NAME) + ' pubip nic nictype=routed parent=' + escapeHtml(f.parent) + ' ipv4.address=<span class="ip">' + escapeHtml(ip) + '</span> name=eth1\n\n' +
+            '<span class="h"># 3) Restart container</span>\n' +
+            '<span class="lxc">lxc</span> restart ' + escapeHtml(CONTAINER_NAME) + '\n\n' +
+            '<span class="h"># 4) Remove new IP from host (now routed to container)</span>\n' +
+            'ip addr del <span class="ip">' + escapeHtml(ip) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent);
+    } else if (action === 'remove') {
+        const removeIp = CURRENT_IP || '<CURRENT_IP>';
+        html =
+            '<span class="h"># 1) Remove routed NIC from container</span>\n' +
+            '<span class="lxc">lxc</span> config device remove ' + escapeHtml(CONTAINER_NAME) + ' pubip\n\n' +
+            '<span class="h"># 2) Remove IP from host parent interface (if still present)</span>\n' +
+            'ip addr del <span class="ip">' + escapeHtml(removeIp) + '/' + escapeHtml(f.subnet) + '</span> dev ' + escapeHtml(f.parent);
+    } else {
+        html = '<span style="color: var(--text-muted);"># IP unchanged — nothing to do.</span>';
+    }
+    document.getElementById('cmdPreview').innerHTML = html;
+}
+
+async function postIp(payload, confirmMessage) {
+    if (!confirm(confirmMessage + '\n\nThe container will be restarted during this operation.')) return;
+    const btnSave = document.getElementById('btnSave');
+    const btnRemove = document.getElementById('btnRemove');
+    [btnSave, btnRemove].forEach(b => b && (b.disabled = true));
+    if (typeof showLoading === 'function') showLoading();
+    try {
+        const resp = await fetch(`/vps/${VPS_ID}/ip`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            showToast(data.message || 'IP updated', 'success');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Failed to update IP', 'error');
+            [btnSave, btnRemove].forEach(b => b && (b.disabled = false));
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('Network error: ' + e.message, 'error');
+        [btnSave, btnRemove].forEach(b => b && (b.disabled = false));
+    } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+    }
+}
+
+function saveIp() {
+    const f = readForm();
+    if (!validate(f, true)) return;
+    if (CURRENT_IP === f.ip) {
+        showToast('IP is unchanged.', 'warning');
+        return;
+    }
+    const verb = CURRENT_IP ? `Change IP from ${CURRENT_IP} to ${f.ip}/${f.subnet}?`
+                            : `Add IP ${f.ip}/${f.subnet} on ${f.parent}?`;
+    postIp({ ip_address: f.ip, subnet: f.subnet, parent_iface: f.parent }, verb);
+}
+
+function removeIp() {
+    const f = readForm();
+    const sn = parseInt(f.subnet, 10);
+    if (isNaN(sn) || sn < 0 || sn > 32) {
+        showToast('Subnet must be between 0 and 32.', 'error');
+        return;
+    }
+    if (!CURRENT_IP) {
+        showToast('No IP to remove.', 'warning');
+        return;
+    }
+    postIp({ ip_address: '', subnet: f.subnet, parent_iface: f.parent },
+           `Remove IP ${CURRENT_IP}/${f.subnet} from ${CONTAINER_NAME}?`);
+}
+
+// Live preview as the user types
+['newIp', 'subnet', 'parentIface'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updatePreview);
+});
+updatePreview();
+</script>
+{% endblock %}

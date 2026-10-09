@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+
+{% block title %}Reinstalling {{ vps.hostname or vps.container_name }} - {{ panel_name }}{% endblock %}
+
+{% block header_title %}VPS Reinstallation{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumb">
+    <a href="{{ url_for('dashboard') }}" class="breadcrumb-item">Dashboard</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <a href="{{ url_for('vps_list') }}" class="breadcrumb-item">My VPS</a>
+    <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+    <span class="breadcrumb-item active">{{ vps.hostname or vps.container_name }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    .reinstall-container {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+
+    .reinstall-card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        padding: 2.75rem 2rem;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .reinstall-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 1.75rem;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: pulse 2s ease-in-out infinite;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 8px 30px rgba(245, 158, 11, 0.35);
+    }
+
+    .reinstall-icon::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+        transform: translate(-50%, -50%);
+        animation: ripple 2.5s ease-out infinite;
+    }
+
+    .reinstall-icon i {
+        font-size: 3rem;
+        color: white;
+        position: relative;
+        z-index: 1;
+        animation: spin-slow 3s linear infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+        50%      { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(245, 158, 11, 0); }
+    }
+    @keyframes ripple {
+        0%   { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+        100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+    }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+
+    .reinstall-title {
+        font-size: 1.85rem;
+        font-weight: 700;
+        margin-bottom: 0.4rem;
+        color: var(--text-primary);
+    }
+
+    .reinstall-subtitle {
+        font-size: 1.05rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.75rem;
+    }
+
+    .reinstall-os-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.9rem;
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #f59e0b;
+        margin-bottom: 2.25rem;
+    }
+
+    .progress-section { margin-bottom: 1.75rem; }
+    .progress-bar-container {
+        width: 100%;
+        height: 12px;
+        background: var(--bg-tertiary);
+        border-radius: 100px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #f59e0b, #d97706, #ea580c);
+        border-radius: 100px;
+        transition: width 0.5s ease;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+    }
+    .progress-bar-fill::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+        animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+    .progress-percentage {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #f59e0b, #ea580c);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.4rem;
+    }
+    .progress-message {
+        font-size: 1rem;
+        color: var(--text-secondary);
+        min-height: 1.5rem;
+    }
+
+    .reinstall-info {
+        margin-top: 2.25rem;
+        padding: 1.5rem;
+        background: var(--bg-secondary);
+        border-radius: 0.75rem;
+        border: 1px solid var(--border-color);
+    }
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.25rem;
+        text-align: left;
+    }
+    .info-item { display: flex; flex-direction: column; gap: 0.25rem; }
+    .info-label {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+    }
+    .info-value { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+
+    .reinstall-steps {
+        margin-top: 1.75rem;
+        text-align: left;
+        padding: 1.5rem;
+        background: var(--bg-tertiary);
+        border-radius: 0.75rem;
+    }
+    .step-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .step-title i { color: #f59e0b; }
+    .step-list { list-style: none; padding: 0; margin: 0; }
+    .step-item {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 0.5rem 0;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+    .step-item.active { color: var(--text-primary); font-weight: 600; }
+    .step-icon {
+        width: 24px; height: 24px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.75rem; flex-shrink: 0;
+        transition: all 0.3s ease;
+    }
+    .step-icon.pending  { background: var(--bg-secondary); border: 2px solid var(--border-color); color: var(--text-muted); }
+    .step-icon.active   { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; box-shadow: 0 3px 10px rgba(245,158,11,0.35); }
+    .step-icon.completed{ background: var(--accent-success); color: #fff; }
+    .spinner {
+        display: inline-block;
+        width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.45);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .warning-box {
+        margin-top: 1.75rem;
+        padding: 1.1rem 1.25rem;
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: 0.75rem;
+        text-align: left;
+        color: var(--text-secondary);
+        font-size: 0.88rem;
+        line-height: 1.55;
+    }
+    .warning-box strong { color: #f59e0b; }
+
+    .completion-message {
+        display: none;
+        margin-top: 1.75rem;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(5,150,105,0.12));
+        border: 2px solid var(--accent-success);
+        border-radius: 0.75rem;
+    }
+    .completion-message.show { display: block; animation: slideIn 0.45s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+    .completion-icon { font-size: 2.75rem; color: var(--accent-success); margin-bottom: 0.75rem; }
+    .completion-title { font-size: 1.4rem; font-weight: 800; color: var(--accent-success); margin-bottom: 0.4rem; }
+    .completion-text  { color: var(--text-secondary); }
+</style>
+
+<div class="reinstall-container">
+    <div class="reinstall-card">
+        <div class="reinstall-icon">
+            <i class="fas fa-redo-alt"></i>
+        </div>
+
+        <h1 class="reinstall-title">Reinstalling Your VPS</h1>
+        <p class="reinstall-subtitle">{{ vps.hostname or vps.container_name }}</p>
+        <div class="reinstall-os-pill">
+            <i class="fas fa-compact-disc"></i>
+            <span>{{ os_version }}</span>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-percentage" id="progress-percentage">{{ progress }}%</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progress-bar" style="width: {{ progress }}%;"></div>
+            </div>
+            <div class="progress-message" id="progress-message">{{ message }}</div>
+        </div>
+
+        <div class="reinstall-info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Container</span>
+                    <span class="info-value">{{ vps.container_name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">New OS</span>
+                    <span class="info-value">{{ os_version }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Resources</span>
+                    <span class="info-value">{{ vps.cpu }} CPU / {{ vps.ram }} RAM</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Storage</span>
+                    <span class="info-value">{{ vps.storage }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="reinstall-steps">
+            <div class="step-title"><i class="fas fa-tasks"></i> Reinstallation Steps</div>
+            <ul class="step-list" id="step-list">
+                <li class="step-item" data-step="5">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Stopping current container</span>
+                </li>
+                <li class="step-item" data-step="15">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Removing old container</span>
+                </li>
+                <li class="step-item" data-step="30">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Creating new container with {{ os_version }}</span>
+                </li>
+                <li class="step-item" data-step="45">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Configuring CPU and RAM limits</span>
+                </li>
+                <li class="step-item" data-step="55">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Applying security configuration</span>
+                </li>
+                <li class="step-item" data-step="65">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Starting new container</span>
+                </li>
+                <li class="step-item" data-step="72">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Applying internal permissions</span>
+                </li>
+                <li class="step-item" data-step="85">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Setting up SSH and root password</span>
+                </li>
+                <li class="step-item" data-step="92">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Restoring public IP</span>
+                </li>
+                <li class="step-item" data-step="96">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Recreating port forwards</span>
+                </li>
+                <li class="step-item" data-step="100">
+                    <span class="step-icon pending"><i class="fas fa-circle"></i></span>
+                    <span>Finalizing reinstallation</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="warning-box">
+            <strong>Note:</strong> All data on the VPS is being permanently replaced.
+            A new root password will be generated automatically. Port forwards and
+            the routed public IP will be restored after the new OS comes up.
+        </div>
+
+        <div class="completion-message" id="completion-message">
+            <div class="completion-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="completion-title">Reinstallation Complete!</div>
+            <div class="completion-text">
+                Your VPS is back online with {{ os_version }}. Taking you to the
+                VPS details page...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ------------------------------------------------------------------
+    //  Real-time reinstall progress — same approach as the install page.
+    //  No auto-reloads; we poll the JSON endpoint and redirect ONCE the
+    //  server confirms the work is done.
+    // ------------------------------------------------------------------
+    let currentProgress = {{ progress|int }};
+    let isCompleted     = false;
+    let pollTimer       = null;
+    const VPS_ID        = {{ vps.id }};
+
+    function updateProgress(progress, message) {
+        progress = Math.max(0, Math.min(100, parseInt(progress, 10) || 0));
+        currentProgress = progress;
+
+        document.getElementById('progress-percentage').textContent = progress + '%';
+        document.getElementById('progress-bar').style.width = progress + '%';
+        if (message) {
+            document.getElementById('progress-message').textContent = message;
+        }
+
+        // Update step icons
+        document.querySelectorAll('.step-item').forEach(step => {
+            const threshold = parseInt(step.dataset.step, 10);
+            const icon = step.querySelector('.step-icon');
+            if (progress >= threshold) {
+                icon.classList.remove('pending', 'active');
+                icon.classList.add('completed');
+                icon.innerHTML = '<i class="fas fa-check"></i>';
+                step.classList.remove('active');
+            } else if (progress >= threshold - 8) {
+                icon.classList.remove('pending', 'completed');
+                icon.classList.add('active');
+                icon.innerHTML = '<div class="spinner"></div>';
+                step.classList.add('active');
+            } else {
+                icon.classList.remove('active', 'completed');
+                icon.classList.add('pending');
+                icon.innerHTML = '<i class="fas fa-circle"></i>';
+                step.classList.remove('active');
+            }
+        });
+
+        if (progress >= 100 && !isCompleted) {
+            isCompleted = true;
+            if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+            document.getElementById('completion-message').classList.add('show');
+            // One-time redirect — same pattern as vps_installing.html.
+            setTimeout(() => {
+                window.location.href = '/vps/' + VPS_ID;
+            }, 2500);
+        }
+    }
+
+    function checkProgress() {
+        fetch('/vps/' + VPS_ID + '/installation-progress', {
+            cache: 'no-store',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (!data || data.success === false) {
+                    throw new Error((data && data.error) || 'bad response');
+                }
+
+                updateProgress(data.progress, data.message);
+
+                // The work is done when status leaves 'reinstalling'. If it
+                // ends up at 'stopped' we treat it as a failure.
+                if (data.completed || data.in_progress === false) {
+                    if (data.status && data.status !== 'reinstalling'
+                        && data.status !== 'running' && data.progress < 100) {
+                        // failure path
+                        if (typeof showToast === 'function') {
+                            showToast('Reinstallation failed. Please try again or contact support.', 'danger');
+                        }
+                        setTimeout(() => {
+                            window.location.href = '/vps/' + VPS_ID;
+                        }, 2500);
+                        return;
+                    }
+                    // success — force 100% (in case the worker flipped status
+                    // to 'running' before writing exactly 100) and redirect.
+                    updateProgress(100, 'Reinstallation complete!');
+                    return;
+                }
+
+                pollTimer = setTimeout(checkProgress, 2000);
+            })
+            .catch(err => {
+                console.warn('progress poll failed:', err);
+                document.getElementById('progress-message').textContent =
+                    'Reconnecting to server…';
+                pollTimer = setTimeout(checkProgress, 3000);
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        updateProgress(currentProgress, '{{ message|escape }}');
+        // Start polling immediately so the user sees real progress.
+        if (currentProgress < 100) {
+            pollTimer = setTimeout(checkProgress, 1500);
+        }
+    });
+
+    // When the tab regains focus, poll right away instead of waiting.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && !isCompleted) {
+            if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+            checkProgress();
+        }
+    });
+</script>
+{% endblock %}
