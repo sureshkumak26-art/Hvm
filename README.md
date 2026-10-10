@@ -2,7 +2,14 @@
 
 This repository contains the existing Flask VPS panel, not a separate replacement app. Branding, background settings, and the existing Discord bot are being updated in place.
 
-## VPS installation
+## Panel installation
+Quick installer for Ubuntu/Debian (run from an interactive SSH terminal):
+```bash
+curl -fsSL https://raw.githubusercontent.com/sureshkumak26-art/Hvm/main/install.sh -o /tmp/anime-cloud-panel-install.sh
+sudo bash /tmp/anime-cloud-panel-install.sh
+```
+The installer prompts for a strong admin password and an optional domain. Review [install.sh](install.sh) before running it.
+
 - **[Panel Install Guide](PANEL_INSTALL_GUIDE.md)** — install from GitHub, configure environment variables, run the panel with systemd, configure Nginx + HTTPS, and optionally run the Discord bot.
 - Repository: https://github.com/sureshkumak26-art/Hvm
 
