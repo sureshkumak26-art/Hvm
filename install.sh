@@ -18,21 +18,28 @@ trap 'fail "Installer stopped at line $LINENO. Review the error above before ret
 [[ "${VERSION_ID%%.*}" =~ ^(22|24|12)$ ]] || log "This OS version is not the primary tested target; continuing best-effort."
 
 if [[ -t 0 ]]; then
-  read -r -p "Panel admin username [paneladmin]: " ADMIN_USER
-  ADMIN_USER="${ADMIN_USER:-paneladmin}"
-  while [[ -z "$ADMIN_USER" || "$ADMIN_USER" =~ [[:space:]] ]]; do
-    read -r -p "Use a non-empty username without spaces: " ADMIN_USER
-  done
-  while true; do
-    read -r -s -p "Set a strong panel admin password (minimum 16 characters): " ADMIN_PASS; printf '\n'
-    [[ "${#ADMIN_PASS}" -ge 16 ]] && break
-    printf 'Password must be at least 16 characters.\n'
-  done
-  read -r -s -p "Confirm admin password: " ADMIN_PASS_CONFIRM; printf '\n'
-  [[ "$ADMIN_PASS" == "$ADMIN_PASS_CONFIRM" ]] || fail "Passwords did not match."
+  if [[ -f "$ENV_FILE" ]]; then
+    log "Existing environment file detected; its credentials will be preserved."
+    ADMIN_USER=""
+    ADMIN_PASS=""
+    ADMIN_PASS_CONFIRM=""
+  else
+    read -r -p "Panel admin username [paneladmin]: " ADMIN_USER
+    ADMIN_USER="${ADMIN_USER:-paneladmin}"
+    while [[ -z "$ADMIN_USER" || "$ADMIN_USER" =~ [[:space:]] ]]; do
+      read -r -p "Use a non-empty username without spaces: " ADMIN_USER
+    done
+    while true; do
+      read -r -s -p "Set a strong panel admin password (minimum 16 characters): " ADMIN_PASS; printf '\n'
+      [[ "${#ADMIN_PASS}" -ge 16 ]] && break
+      printf 'Password must be at least 16 characters.\n'
+    done
+    read -r -s -p "Confirm admin password: " ADMIN_PASS_CONFIRM; printf '\n'
+    [[ "$ADMIN_PASS" == "$ADMIN_PASS_CONFIRM" ]] || fail "Passwords did not match."
+  fi
   read -r -p "Panel domain for HTTPS (e.g. panel.example.com), or leave blank for SSH-tunnel-only: " PANEL_DOMAIN
 else
-  fail "Run interactively so you can set a secure administrator password. Do not pipe this script into a non-interactive unattended job."
+  fail "Run interactively so you can set a secure administrator password. Download the script first, then run it with sudo."
 fi
 
 [[ "$PANEL_DOMAIN" != *"/"* && "$PANEL_DOMAIN" != *" "* ]] || fail "Enter only a domain name, without a URL or spaces."
