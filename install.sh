@@ -11,7 +11,7 @@ log() { printf '\n\033[1;36m[Anime Cloud Panel]\033[0m %s\n' "$*"; }
 fail() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 trap 'fail "Installer stopped at line $LINENO. Review the error above before retrying."' ERR
 
-[[ "$(id -u)" -eq 0 ]] || fail "Run as root, for example: curl -fsSL https://raw.githubusercontent.com/sureshkumak26-art/Hvm/main/install.sh | sudo bash"
+[[ "$(id -u)" -eq 0 ]] || fail "Download the installer first, then run it interactively: curl -fsSL https://raw.githubusercontent.com/sureshkumak26-art/Hvm/main/install.sh -o /tmp/anime-cloud-panel-install.sh && sudo bash /tmp/anime-cloud-panel-install.sh"
 [[ -r /etc/os-release ]] || fail "Cannot identify Linux distribution."
 . /etc/os-release
 [[ "${ID:-}" == "ubuntu" || "${ID:-}" == "debian" ]] || fail "Supported systems: Ubuntu or Debian."
