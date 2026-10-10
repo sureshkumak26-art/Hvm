@@ -4,6 +4,26 @@ This guide installs the existing Anime Cloud Panel from GitHub on an Ubuntu VPS.
 
 > **Security warning:** This panel can expose powerful VPS-management functions. Do not publish it with default credentials or without HTTPS and firewall rules. Review the code and permissions before giving it access to production hosts.
 
+
+## One-command installer
+
+On a fresh Ubuntu 22.04/24.04 or supported Debian server, run these commands in an interactive SSH session. The installer asks you to set a strong admin password and optionally enter a domain for HTTPS.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sureshkumak26-art/Hvm/main/install.sh -o /tmp/anime-cloud-panel-install.sh
+sudo bash /tmp/anime-cloud-panel-install.sh
+```
+
+The script installs dependencies, clones or fast-forward-updates this repository at `/opt/anime-cloud-panel`, creates a Python virtual environment, generates secret keys for a fresh install, configures a systemd service, and optionally configures Nginx/HTTPS if you provide a domain whose DNS already points to the server. Review the script before running it. If an existing environment file is present, it is backed up and preserved rather than overwritten.
+
+If you leave the domain blank, the panel stays bound to localhost. Connect securely with an SSH tunnel from your own computer:
+
+```bash
+ssh -L 5000:127.0.0.1:5000 YOUR_USER@YOUR_SERVER_IP
+```
+
+Then open `http://127.0.0.1:5000` locally. Do not expose port 5000 directly to the internet.
+
 ## 1. Prepare the VPS
 
 Connect over SSH, then install the required tools:
