@@ -150,8 +150,10 @@ class HypervisorCommands(commands.Cog, name="Hypervisor"):
         guest = result.get("guest", {})
         username, password = str(guest.get("username", "")), str(guest.get("password", ""))
         if not username or not password:
+            cleanup = await self._request("POST", f"/guests/{kind.value}/{body['name']}/delete", {"confirm": True}, timeout=60)
+            outcome = "Guest cleanup requested." if cleanup.get("ok") else "WARNING: cleanup failed; inspect the node immediately."
             await self._audit(interaction.user, "guest-create", kind.value, body["name"], "failed-no-credentials")
-            return await interaction.followup.send("Guest created but no credentials were returned. Check node-agent logs before assigning access.", ephemeral=True)
+            return await interaction.followup.send(f"Guest created without returned credentials. {outcome}", ephemeral=True)
         embed = discord.Embed(title="Your HVM guest is ready",
                               description="Save these credentials securely and change the password after first login.",
                               color=0x22C55E)
@@ -163,10 +165,12 @@ class HypervisorCommands(commands.Cog, name="Hypervisor"):
         try:
             await owner.send(embed=embed)
         except (discord.Forbidden, discord.HTTPException):
-            await self._request("POST", f"/guests/{kind.value}/{body['name']}/delete", {"confirm": True}, timeout=60)
-            await self._audit(interaction.user, "guest-create", kind.value, body["name"], "rolled-back-dm-failed")
+            cleanup = await self._request("POST", f"/guests/{kind.value}/{body['name']}/delete", {"confirm": True}, timeout=60)
+            rolled_back = bool(cleanup.get("ok"))
+            outcome = "The guest was deleted." if rolled_back else "WARNING: automatic cleanup failed; delete the guest manually on the node immediately."
+            await self._audit(interaction.user, "guest-create", kind.value, body["name"], "rolled-back-dm-failed" if rolled_back else "cleanup-failed-dm-failed")
             return await interaction.followup.send(
-                f"Could not DM {owner.mention}; the new guest was rolled back to avoid stranding credentials. Ask the user to enable DMs and retry.",
+                f"Could not DM {owner.mention}. {outcome} No credentials were posted publicly. Ask the user to enable DMs and retry.",
                 ephemeral=True)
         await self._audit(interaction.user, "guest-create", kind.value, body["name"], "success")
         await interaction.followup.send(
