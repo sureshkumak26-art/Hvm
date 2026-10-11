@@ -12,6 +12,7 @@ The installer prompts for a strong admin password and an optional domain. Review
 
 - **[Panel Install Guide](PANEL_INSTALL_GUIDE.md)** — install from GitHub, configure environment variables, run the panel with systemd, configure Nginx + HTTPS, and optionally run the Discord bot.
 - Repository: https://github.com/sureshkumak26-art/Hvm
+- **Mining security monitor:** the bot can call the authenticated KVM/LXC node agent from https://github.com/sureshkumak26-art/HVM-Panel. Configure `NODE_AGENT_URL`, `NODE_AGENT_TOKEN`, `MINING_ALERT_CHANNEL_ID`, and `MINING_SCAN_INTERVAL_SECONDS` in `.env`. The node agent needs QEMU Guest Agent inside KVM guests and LXC CLI access on the host.
 
 ## Appearance
 - User profile supports dark, light, and automatic themes.
@@ -19,7 +20,7 @@ The installer prompts for a strong admin password and an optional domain. Review
 - Image background takes priority over video background when enabled.
 
 ## Discord VPS bot
-Configure the root `.env` using `.env.example`. Set `DISCORD_TOKEN`, `PANEL_API_KEY`, and `ADMIN_USER_IDS` (comma-separated Discord user IDs). Then install dependencies and run `python bot/bot.py` after the panel is online.
+Configure the root `.env` using `.env.example`. Set `DISCORD_TOKEN`, `PANEL_API_KEY`, and `ADMIN_USER_IDS` (comma-separated Discord user IDs). Then install dependencies and run `python bot/bot.py` after the panel is online. See [bot/README.md](bot/README.md) for mining-monitor prerequisites and the automatic whole-guest shutdown behavior.
 
 ## Security
 A previous version included a panel API key in source code. Consider it compromised and rotate/revoke it in the panel before deploying. Never commit your real `.env`, Discord token, or API key. The bot now denies administrative slash commands unless a Discord user ID is explicitly allowlisted.
