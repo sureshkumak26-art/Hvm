@@ -18,7 +18,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("anime-cloud-bot")
-COGS = ["cogs.vps", "cogs.users", "cogs.nodes", "cogs.system"]
+COGS = ["cogs.vps", "cogs.users", "cogs.nodes", "cogs.system", "cogs.mining"]
 
 
 class AnimeCloudCommandTree(app_commands.CommandTree):
@@ -80,6 +80,7 @@ async def help_cmd(interaction: discord.Interaction):
     )
     embed.add_field(name="VPS", value="`/vps-list` `/vps-info` `/vps-create`\n`/vps-start` `/vps-stop` `/vps-restart`\n`/vps-suspend` `/vps-unsuspend` `/vps-delete`\n`/vps-exec` `/vps-resize` `/vps-stats`", inline=False)
     embed.add_field(name="Nodes", value="`/nodes-list` `/node-info` `/node-test` `/node-exec`", inline=False)
+    embed.add_field(name="Security", value="`/mining-scan` — scan KVM and LXC guests; confirmed miner guests are stopped automatically.", inline=False)
     embed.add_field(name="Users", value="`/users-list` `/user-info` `/user-create` `/user-update` `/user-delete`", inline=False)
     embed.add_field(name="System", value="`/panel-stats` `/system-info` `/live-stats` `/backup-list` `/search`", inline=False)
     embed.set_footer(text="Anime Cloud • Authorized administrators only")
