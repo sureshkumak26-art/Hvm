@@ -12,6 +12,7 @@ The installer prompts for a strong admin password and an optional domain. Review
 
 - **[Panel Install Guide](PANEL_INSTALL_GUIDE.md)** — install from GitHub, configure environment variables, run the panel with systemd, configure Nginx + HTTPS, and optionally run the Discord bot.
 - Repository: https://github.com/sureshkumak26-art/Hvm
+- **Discord customer onboarding:** `/register` sends users the configured panel registration link and `/vm-request` submits KVM/LXC requests to a private review channel. Configure `PANEL_REGISTER_URL` and `VM_REQUEST_CHANNEL_ID`; see [Customer Onboarding Guide](bot/CUSTOMER-ONBOARDING.md). This is request intake, not yet automatic guest provisioning/credential creation: the existing API requires a panel database user ID and node ID, so a secure Discord-to-panel identity bridge is needed first.
 - **Mining security monitor:** the bot can call the authenticated KVM/LXC node agent from https://github.com/sureshkumak26-art/HVM-Panel. Configure `NODE_AGENT_URL`, `NODE_AGENT_TOKEN`, `MINING_ALERT_CHANNEL_ID`, and `MINING_SCAN_INTERVAL_SECONDS` in `.env`. The node agent needs QEMU Guest Agent inside KVM guests and LXC CLI access on the host.
 
 ## Appearance
