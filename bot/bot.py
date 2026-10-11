@@ -18,13 +18,14 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("anime-cloud-bot")
-COGS = ["cogs.vps", "cogs.users", "cogs.nodes", "cogs.system", "cogs.mining"]
+COGS = ["cogs.vps", "cogs.users", "cogs.nodes", "cogs.system", "cogs.mining", "cogs.customer"]
 
 
 class AnimeCloudCommandTree(app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Public customer onboarding commands are deliberately available to non-admins.
         command = interaction.command
-        if command and command.name == "help":
+        if command and command.name in {"help", "register", "vm-request"}:
             return True
         if not ADMIN_USER_IDS:
             message = "Admin access is disabled. Configure ADMIN_USER_IDS on the panel host."
@@ -75,15 +76,16 @@ async def on_ready():
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(
         title="☁️ Anime Cloud Panel Bot",
-        description="VPS management commands for authorized Anime Cloud administrators.",
+        description="Customer onboarding plus VPS management commands for authorized administrators.",
         color=0xc084fc,
     )
+    embed.add_field(name="Customer", value="`/register` — open panel registration/login\n`/vm-request` — request a KVM VM or LXC container", inline=False)
     embed.add_field(name="VPS", value="`/vps-list` `/vps-info` `/vps-create`\n`/vps-start` `/vps-stop` `/vps-restart`\n`/vps-suspend` `/vps-unsuspend` `/vps-delete`\n`/vps-exec` `/vps-resize` `/vps-stats`", inline=False)
     embed.add_field(name="Nodes", value="`/nodes-list` `/node-info` `/node-test` `/node-exec`", inline=False)
     embed.add_field(name="Security", value="`/mining-scan` — scan KVM and LXC guests; confirmed miner guests are stopped automatically.", inline=False)
     embed.add_field(name="Users", value="`/users-list` `/user-info` `/user-create` `/user-update` `/user-delete`", inline=False)
     embed.add_field(name="System", value="`/panel-stats` `/system-info` `/live-stats` `/backup-list` `/search`", inline=False)
-    embed.set_footer(text="Anime Cloud • Authorized administrators only")
+    embed.set_footer(text="Anime Cloud • Customer onboarding / Admin controls")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
