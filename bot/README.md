@@ -32,3 +32,18 @@ On every KVM node, install and enable QEMU Guest Agent in each guest you want to
 ## Security
 
 Never commit real `.env` files, Discord tokens, panel API keys, or node tokens. Rotate any key that was ever committed to source control.
+
+
+## Direct KVM/LXC administration
+
+The `cogs.hypervisor` extension uses the node-agent guest API in the HVM-Panel repository. Available admin-only commands:
+
+- `/vm-list` and `/vm-info` — list guests and inspect their state/config.
+- `/vm-create` — create KVM or LXC guests, generate a login, and DM credentials to the selected Discord user.
+- `/vm-action` — start, stop, or restart a guest.
+- `/vm-delete` — permanently delete after a Discord confirmation.
+- `/hypervisor-status` — check node-agent health.
+
+Set `NODE_AGENT_URL` to the private base URL of the node agent (for example, `http://127.0.0.1:8787` when bot and agent share a host) and set `NODE_AGENT_TOKEN` to the same high-entropy token as `HVM_NODE_TOKEN`. Do **not** set `NODE_AGENT_URL` to the public panel website. Configure `ADMIN_AUDIT_CHANNEL_ID` if audit events should also be posted to a Discord channel.
+
+KVM provisioning requires a cloud-init-enabled image and `HVM_KVM_IMAGE` configured in the node agent's environment. LXC provisioning requires LXD/LXC and a storage pool supporting the requested disk size. See [HVM-Panel node-agent documentation](https://github.com/sureshkumak26-art/HVM-Panel/blob/main/node-agent/README.md). Test on a staging node before production use. VM credentials are never posted in a public channel; if the target user has DMs blocked, the bot requests guest rollback.
