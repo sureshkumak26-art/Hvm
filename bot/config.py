@@ -18,6 +18,12 @@ ADMIN_USER_IDS = {
     if value.strip().isdigit()
 }
 
+# Separate authenticated node-agent API for KVM/LXC security monitoring.
+NODE_AGENT_URL = os.getenv("NODE_AGENT_URL", "").strip().rstrip("/")
+NODE_AGENT_TOKEN = os.getenv("NODE_AGENT_TOKEN", "").strip()
+MINING_ALERT_CHANNEL_ID = int(os.getenv("MINING_ALERT_CHANNEL_ID", "0") or "0")
+MINING_SCAN_INTERVAL_SECONDS = max(60, min(3600, int(os.getenv("MINING_SCAN_INTERVAL_SECONDS", "120") or "120")))
+
 CLR_OK = 0x34d399
 CLR_ERR = 0xef4444
 CLR_WARN = 0xfbbf24
