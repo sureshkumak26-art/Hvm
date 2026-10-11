@@ -26,6 +26,7 @@ VM_REQUEST_CHANNEL_ID = int(os.getenv("VM_REQUEST_CHANNEL_ID", "0") or "0")
 NODE_AGENT_URL = os.getenv("NODE_AGENT_URL", "").strip().rstrip("/")
 NODE_AGENT_TOKEN = os.getenv("NODE_AGENT_TOKEN", "").strip()
 MINING_ALERT_CHANNEL_ID = int(os.getenv("MINING_ALERT_CHANNEL_ID", "0") or "0")
+ADMIN_AUDIT_CHANNEL_ID = int(os.getenv("ADMIN_AUDIT_CHANNEL_ID", "0") or "0")
 MINING_SCAN_INTERVAL_SECONDS = max(60, min(3600, int(os.getenv("MINING_SCAN_INTERVAL_SECONDS", "120") or "120")))
 
 CLR_OK = 0x34d399
