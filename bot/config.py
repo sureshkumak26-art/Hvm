@@ -18,6 +18,10 @@ ADMIN_USER_IDS = {
     if value.strip().isdigit()
 }
 
+# Customer registration and provisioning request workflow.
+PANEL_REGISTER_URL = os.getenv("PANEL_REGISTER_URL", "").strip()
+VM_REQUEST_CHANNEL_ID = int(os.getenv("VM_REQUEST_CHANNEL_ID", "0") or "0")
+
 # Separate authenticated node-agent API for KVM/LXC security monitoring.
 NODE_AGENT_URL = os.getenv("NODE_AGENT_URL", "").strip().rstrip("/")
 NODE_AGENT_TOKEN = os.getenv("NODE_AGENT_TOKEN", "").strip()
