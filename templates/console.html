@@ -449,6 +449,9 @@
             </div>
         </div>
         <div class="control-buttons">
+            <button class="btn" id="sshxBtn" title="Start SSHX shared terminal for this VPS" disabled>
+                <i class="fa-solid fa-share-nodes"></i><span class="label">Start SSHX</span>
+            </button>
             <button class="btn" id="fullscreenBtn" title="Toggle fullscreen (F11)">
                 <i class="fa-regular fa-window-maximize"></i><span class="label">Fullscreen</span>
             </button>
@@ -461,6 +464,12 @@
         </div>
     </div>
 
+    <!-- SSHX link appears here after the selected VPS starts its shared terminal. -->
+    <div id="sshxResult" class="d-none" style="padding:.65rem 1rem;background:rgba(79,172,254,.10);border-bottom:1px solid rgba(79,172,254,.25);color:var(--c-text);">
+        <i class="fa-solid fa-link"></i> SSHX link:
+        <a id="sshxLink" href="#" target="_blank" rel="noopener noreferrer" style="color:var(--c-cyan-2);overflow-wrap:anywhere;">Waiting for link…</a>
+        <button type="button" class="btn" id="sshxCopyBtn" style="margin-left:.5rem;">Copy link</button>
+    </div>
     <!-- Terminal -->
     <div id="terminal-container"></div>
 
@@ -592,7 +601,12 @@
         const reconnectBtn = document.getElementById('reconnectBtn');
         const exitBtn = document.getElementById('exitBtn');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const sshxBtn = document.getElementById('sshxBtn');
+        const sshxResult = document.getElementById('sshxResult');
+        const sshxLink = document.getElementById('sshxLink');
+        const sshxCopyBtn = document.getElementById('sshxCopyBtn');
         const terminalContainer = document.getElementById('terminal-container');
+        let sshxStarting = false;
         const consolePage = document.getElementById('vpsConsolePage');
         const overlayCloseBtn = document.getElementById('overlayCloseBtn');
 
@@ -675,6 +689,7 @@
         socket.on('ssh_connected', (data) => {
             connecting = false;
             connected = true;
+            if (sshxBtn) sshxBtn.disabled = false;
             overlay.classList.add('d-none');
             try { fitAddon.fit(); } catch(e) {}
             setStatus('connected', `${data.username}@${data.host}:${data.port}`);
@@ -685,7 +700,71 @@
             term.focus();
         });
 
-        socket.on('ssh_output', (data) => { term.write(data); });
+        socket.on('ssh_output', (data) => {
+            term.write(data);
+            // SSHX prints a share URL into the active SSH session. Surface it as a clickable link.
+            const plain = String(data).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+            const match = plain.match(/https?:\/\/(?:www\.)?sshx\.io\/[^\s"'<>]+/i);
+            if (match && sshxLink && sshxResult) {
+                const url = match[0].replace(/[),.;]+$/, '');
+                try {
+                    const parsed = new URL(url);
+                    if (parsed.protocol === 'https:' && parsed.hostname === 'sshx.io') {
+                        sshxLink.href = url;
+                        sshxLink.textContent = url;
+                        sshxResult.classList.remove('d-none');
+                        if (sshxBtn) { sshxBtn.disabled = false; sshxBtn.innerHTML = '<i class="fa-solid fa-share-nodes"></i><span class="label">SSHX Running</span>'; }
+                    }
+                } catch (_) {}
+            }
+        });
+
+        if (sshxBtn) {
+            sshxBtn.addEventListener('click', () => {
+                if (!connected) {
+                    alert('Connect to this VPS in the console first.');
+                    return;
+                }
+                if (sshxStarting) return;
+                const confirmed = confirm('Start SSHX on this VPS? Anyone with the SSHX link may be able to access the shared terminal. Share it only with trusted people.');
+                if (!confirmed) return;
+                sshxStarting = true;
+                sshxBtn.disabled = true;
+                sshxBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span class="label">Starting…</span>';
+                if (sshxResult) sshxResult.classList.remove('d-none');
+                if (sshxLink) { sshxLink.href = '#'; sshxLink.textContent = 'Installing / starting SSHX… watch the terminal output'; }
+                term.writeln('\r\n\x1b[36m[ Starting SSHX for {{ vps.container_name }}… ]\x1b[0m\r\n');
+                // This command runs inside the currently authenticated SSH session for the selected VPS.
+                socket.emit('ssh_input', {
+                    vps_id: vpsId,
+                    input: 'if ! command -v sshx >/dev/null 2>&1; then curl -fsSL https://sshx.io/get | sh; fi; export PATH="$HOME/.local/bin:$HOME/bin:$PATH"; sshx\n'
+                });
+                window.setTimeout(() => {
+                    sshxStarting = false;
+                    if (sshxBtn && sshxBtn.disabled) {
+                        sshxBtn.disabled = !connected;
+                        sshxBtn.innerHTML = '<i class="fa-solid fa-share-nodes"></i><span class="label">Start SSHX</span>';
+                    }
+                }, 30000);
+            });
+        }
+
+        if (sshxCopyBtn) {
+            sshxCopyBtn.addEventListener('click', async () => {
+                const url = sshxLink && sshxLink.href;
+                if (!url || url === '#' || !url.startsWith('https://sshx.io/')) {
+                    alert('SSHX link is not ready yet.');
+                    return;
+                }
+                try {
+                    await navigator.clipboard.writeText(url);
+                    sshxCopyBtn.textContent = 'Copied!';
+                    window.setTimeout(() => { sshxCopyBtn.textContent = 'Copy link'; }, 1800);
+                } catch (_) {
+                    alert('Could not copy automatically. Open the link and copy it manually.');
+                }
+            });
+        }
 
         socket.on('ssh_error', (err) => {
             connecting = false;
@@ -698,6 +777,7 @@
         socket.on('ssh_disconnected', () => {
             connected = false;
             connecting = false;
+            if (sshxBtn) sshxBtn.disabled = true;
             setStatus('disconnected', 'Disconnected');
             overlay.classList.remove('d-none');
             term.writeln('\r\n\x1b[33m── Session terminated ──\x1b[0m\r\n');
@@ -705,6 +785,7 @@
 
         socket.on('disconnect', () => {
             if (connected) {
+                if (sshxBtn) sshxBtn.disabled = true;
                 connected = false;
                 connecting = false;
                 setStatus('disconnected', 'Socket lost');
